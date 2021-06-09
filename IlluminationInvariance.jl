@@ -63,10 +63,10 @@ function AssembleMatrices(file_list, kernel="laplacian")
         # Parse for theta and phi angles
         for idx in range(1, stop=length(splitVec1))
             if splitVec1[idx] == "Theta"
-                theta1 = parse(Float64, splitVec1[idx+1])
+                theta1 = deg2rad(parse(Float64, splitVec1[idx+1]))
             end
             if splitVec1[idx] == "Phi"
-                phi1 = parse(Float64, splitVec1[idx+1])
+                phi1 = deg2rad(parse(Float64, splitVec1[idx+1]))
             end
         end
 
@@ -88,10 +88,10 @@ function AssembleMatrices(file_list, kernel="laplacian")
             # Parse for theta and phi angles
             for idx in range(1, stop=length(splitVec2))
                 if splitVec2[idx] == "Theta"
-                    theta2 = parse(Float64, splitVec2[idx+1])
+                    theta2 = deg2rad(parse(Float64, splitVec2[idx+1]))
                 end
                 if splitVec2[idx] == "Phi"
-                    phi2 = parse(Float64, splitVec2[idx+1])
+                    phi2 = deg2rad(parse(Float64, splitVec2[idx+1]))
                 end
             end
 
@@ -117,7 +117,7 @@ function AssembleMatrices(file_list, kernel="laplacian")
         end
     end
 
-    G = (tr(G) .* G)
+    # G = (transpose(G) .* G)
 
     results = ComputeNorm(G, dPdX, dPdY, outputSize)
 
