@@ -34,9 +34,9 @@ function CreateLP(csvPath)
 
     lampData = CSV.File(csvPath; select=["x_lamp", "y_lamp", "z_lamp"])
 
-    X = []
-    Y = []
-    Z = []
+    X = Float64[]
+    Y = Float64[]
+    Z = Float64[]
 
     for row in lampData
         push!(X, row.x_lamp)
@@ -82,11 +82,13 @@ function ComputeNormals(imageStack, LP)
 end
 
 
-function NormalsPipeline(folderPath, csvPath)
+function NormalsPipeline(folderPath, csvPath, ext="png")
 
-    fileList = glob("*.png", folderPath)
+    # Get files and create stack
+    fileList = glob("*."*ext, folderPath)
     imageStack = CreateFlatImageStack(fileList)    
 
+    # Create light position structure
     LP = CreateLP(csvPath)
 
     normalMaps = ComputeNormals(imageStack, LP)
@@ -105,3 +107,11 @@ end
 function imageDisp01(img) img.+abs(minimum(img)) end
 
 function colorizeNormals(normalX, normalY, normalZ) colorview(RGB, normalX, normalY, normalZ) end
+
+
+base = "C:/Users/dlewi/Downloads/BlenderData/Statue/RTI/"
+folderPath = base * "/PNG/"
+
+csvPath = base * "/Image.csv"
+
+normalsColor = NormalsPipeline(folderPath, csvPath)
