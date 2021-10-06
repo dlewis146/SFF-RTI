@@ -1,4 +1,7 @@
-using Images, Glob, CSV, DataFrames, GR
+using Printf, LinearAlgebra, Images, Glob, CSV, DataFrames, GR
+
+include("./ImageUtilities.jl")
+
 
 struct LP_Struct
     """
@@ -53,7 +56,7 @@ function normalizeLostDynamic(normalMaps)
     """
     Translated from Matlab code written by Marvin Nurit.
 
-    Takes in 3 x (m*n) array of normals computed by ComputeNormals and normalizes them to expected scales for visualization.
+    Takes in (3 x (m*n)) array of normals computed by `ComputeNormals` and normalizes them to expected scales for visualization.
     """
 
     norm = sqrt.(sum(normalMaps.^2, dims=1))
@@ -68,7 +71,7 @@ function ComputeNormals(imageStack, LP)
     """
     Translated from Matlab code written by Marvin Nurit.
 
-    Takes in 3 x (m*n) array of flattened images and LP struct to compute surface normals.
+    Takes in (3 x (m*n)) array of flattened images and LP struct to compute surface normals.
     """
 
     positions = [LP.X LP.Y LP.Z]
@@ -83,6 +86,13 @@ end
 
 
 function NormalsPipeline(folderPath, csvPath, ext="png")
+    """
+    Handler function for taking in a path to a folder of images (folderPath),
+    and a path to a CSV containing light position information. Returns a 
+    normals map in the appropriate range for JuliaImages to parse and save
+    out.
+    """
+
 
     # Get files and create stack
     fileList = glob("*."*ext, folderPath)
@@ -99,19 +109,19 @@ function NormalsPipeline(folderPath, csvPath, ext="png")
     normalY = reshape(normalMaps[2,:], imgSize)
     normalZ = reshape(normalMaps[3,:], imgSize)
 
-    return colorizeNormals(imageDisp01(normalX), imageDisp01(normalY), imageDisp01(normalZ))
+    # normalMaps = normalizeLostDynamic(normalMaps)
 
-    # return normalX, normalY, normalZ
+    @printf("Range of normalsX: [%f, %f]\n", minimum(normalX), maximum(normalX))
+    @printf("Range of normalsY: [%f, %f]\n", minimum(normalY), maximum(normalY))
+    @printf("Range of normalsZ: [%f, %f]\n", minimum(normalZ), maximum(normalZ))
+    
+
+    return colorizeNormals(shiftNormalsRange(normalX), shiftNormalsRange(normalY), normalZ)
+    # return colorizeNormals(imageCenterValues(normalX), imageCenterValues(normalY), normalZ)
 end
+
 
 function imageDisp01(img) img.+abs(minimum(img)) end
 
+
 function colorizeNormals(normalX, normalY, normalZ) colorview(RGB, normalX, normalY, normalZ) end
-
-
-base = "C:/Users/dlewi/Downloads/BlenderData/Statue/RTI/"
-folderPath = base * "/PNG/"
-
-csvPath = base * "/Image.csv"
-
-normalsColor = NormalsPipeline(folderPath, csvPath)

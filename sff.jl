@@ -1,29 +1,74 @@
-using Images
+function sffSimple(imgList, focusList)
+    """
+    Takes in list of focus maps and list of focal distances and computes 
+    depth map by finding maximum image value for each pixel.
 
-include("../Utilities/FilenameParser.jl")
+        imgList::Array{Array{Float64}} - List of computed focus maps for
+                                         input images, ex) image gradients
+        
+        focusList::Array{Float64}      - List of focus distances for each 
+                                         image. Correlated to imgList by 
+                                         stored order.
+    """
 
-# # Reliability measure
-# if nargout==2
-#     @sprintf("Rmeasure      ")
-#     err = zeros(M, N)
-#
-#     #Compute fitting error:
-#     for p = 1:P
-#         err = err + abs( imageStack[:,:,p] - ...
-#             A.*exp(-(opts.focus[p] zi).^2./(2*s.^2)))
-#         @sprintf("\b\b\b\b\b[%02d%%]",round(100*p/P))
-#     end
-#
-#     h = fspecial["average", opts.nhsize]
-#     err = imfilter[err, h]
-#
-#     R = 20*log10(P*imageStackax./err)
-#     mask = isnan(zi)
-#     R[mask|R<0|isnan(R)] = 0
-#     @sprintf("\n")
-# end
+    # Get image dimensions
+    M = size(imgList[1], 1)
+    N = size(imgList[1], 2)
+    P = length(imgList)
+
+    # Create focus stack of incoming images
+
+    imageStack = zeros(size(imgList[1])[1], size(imgList[1])[2], length(imgList))
+
+    for idx in eachindex(imgList)
+
+        # Get image from given list
+        img = imgList[idx]
+
+        # Place into stack
+        imageStack[:,:,idx] = img
+    end
+
+
+    # Create empty depth map (background being NaN for parsing later)
+    depthMap = fill(NaN, (M,N))
+
+    for x in range(1, stop=size(imageStack, 1))
+        for y in range(1, stop=size(imageStack, 2))
+
+            v = imageStack[x,y,:]
+
+            # If all points are the same, assume background and keep as NaN. Check this by comparing min and max of imageStack vector
+            if (maximum(v) == minimum(v))
+                continue
+            end
+
+            # Find image index where estimated focus is greatest
+            idx = argmax(v)
+
+            # Save focus value as pixel value in depth map
+            depthMap[x,y] = focusList[idx]
+
+        end
+    end
+
+    return depthMap
+end
+
 
 function sff(imgList, focusList)
+    """
+    UNDER CONSTRUCTION
+
+    Shape from Focus algorithm originally programmed in Matlab by Said Pertuz   
+
+    https://www.mathworks.com/matlabcentral/fileexchange/55103-shape-from-focus
+    """
+
+
+    M = size(imgList[1], 1)
+    N = size(imgList[1], 2)
+    P = length(imgList)
 
     imageStack = zeros(size(imgList[1])[1], size(imgList[1])[2], length(imgList))
 
@@ -68,12 +113,44 @@ function sff(imgList, focusList)
 
     # Reliability measure
 
+    # if nargout==2
+    #     @sprintf("Rmeasure      ")
+    #     err = zeros(M, N)
+    #
+    #     #Compute fitting error:
+    #     for p = 1:P
+    #         err = err + abs( imageStack[:,:,p] - ...
+    #             A.*exp(-(opts.focus[p] zi).^2./(2*s.^2)))
+    #         @sprintf("\b\b\b\b\b[%02d%%]",round(100*p/P))
+    #     end
+    #
+    #     h = fspecial["average", opts.nhsize]
+    #     err = imfilter[err, h]
+    #
+    #     R = 20*log10(P*imageStackax./err)
+    #     mask = isnan(zi)
+    #     R[mask|R<0|isnan(R)] = 0
+    #     @sprintf("\n")
+    # end
+
+    # error = zeros(M,N)
+
+    # # Compute fitting error
+    # for p in range(1, stop=P)
+    #     error = error + abs.(imageStack[:,:,p] - A.*exp( -( focusList[p] * zi ).^ (2 ./ (2*(s.^2))) ))
+    # end
+
     return z
 
 end
 
 
 function gauss3P(x, Y)
+    """
+    For use by `sff`
+    """
+
+
     STEP = 2
 
     M,N,P = size(Y)
@@ -194,12 +271,37 @@ function gauss3P(x, Y)
 
 end
 
-if abspath(PROGRAM_FILE) == @__FILE__
-    folder_path = "/media/david/USS Defiant/julia/GramTest/paradeShieldNew/"
 
-    imgList= glob("*.png", folder_path)
+function Depth2Normal(img)
+    """
+    Takes in (m x n) image (depth map) and uses 
+    it to compute the surface normal at each point.
+    """
 
-    focusList = ParseForZPositionsProcessed(folder_path)
 
-    sff(imgList, focusList)
+    normalsOut = zeros(size(img, 1)+2, size(img, 2)+2, 3)
+
+    for c in range(2, stop=size(img, 1)-1)
+        for r in range(2, stop=size(img, 2)-1)
+
+            # dzdx = (Float64(img[c+1, r]) - Float64(img[c-1, r])) / 2.0
+            # dzdy = (Float64(img[c, r+1]) - Float64(img[c, r-1])) / 2.0
+            # dzdx = (Float64(img[c, r+1]) - Float64(img[c, r-1])) / 2.0
+            # dzdy = (Float64(img[c+1, r]) - Float64(img[c-1, r])) / 2.0
+            # d = [-dzdx, -dzdy, 1.0]
+
+            t = [ r  , c-1, Float64(img[c-1, r  ]) ]
+            l = [ r-1, c  , Float64(img[c  , r-1]) ]
+            f = [ r  ,   c, Float64(img[c  , r  ]) ]
+            d = cross( (l.-f), (t.-f) )
+
+            n = normalize(d)
+
+            normalsOut[c,r,:] .= n
+
+        end
+    end
+
+    return normalsOut[2:size(normalsOut, 1)-1, 2:size(normalsOut, 2)-1, :]
+
 end

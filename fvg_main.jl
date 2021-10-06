@@ -2,20 +2,7 @@ using Images, Glob, CSV, DataFrames, CoordinateTransformations
 
 include("./IlluminationInvariance.jl")
 
-struct LightAngle
-    """
-    Structure for containing X,Y,Z coordinates of lamps as well as converted θ, ϕ angles.
-    """
-    x::Float64
-    y::Float64
-    z::Float64
-    theta::Float64
-    phi::Float64
-
-end
-
-
-base = "C:/Users/dlewi/Downloads/BlenderData/Statue/RTI/"
+base = "D:/Research/Generated Data/Blender/Statue du parc d'Austerlitz/RTI/"
 folderPath = base * "/PNG/"
 
 fileList = glob("*.png", folderPath)
@@ -33,16 +20,8 @@ for row in rowList
     # Compute spherical coordinates
     sph = SphericalFromCartesian()([row.x_lamp,row.y_lamp,row.z_lamp])
 
-    # Convert theta and phi from degrees to radians
-    # theta = deg2rad(sph.θ)
-    # phi = deg2rad(sph.ϕ)
-
-    theta = sph.θ
-    phi = sph.ϕ
-
-    angleObj = LightAngle(row.x_lamp, row.y_lamp, row.z_lamp, theta, phi)
-
-    push!(angleList, angleObj)
+    # Place all coordinates (including spherical coordinate system angle) into LightAngle object list
+    push!(angleList, LightAngle(row.x_lamp, row.y_lamp, row.z_lamp, sph.θ, sph.ϕ))
 end
 
 imgFVG = ComputeFullVectorGradient(fileList, angleList)
