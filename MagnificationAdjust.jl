@@ -1,6 +1,6 @@
 using DelimitedFiles, Images, DataStructures
 
-function MagnificationAdjust(file_list, configPath, r)
+function MagnificationAdjustXRTI(file_list, configPath, r)
 
     # Read first image to get image shape
     numCols = size(load(file_list[1]))[1]
@@ -78,4 +78,65 @@ function MagnificationAdjust(file_list, configPath, r)
 
     end
     return file_dict
+end
+
+function MagnificationAdjustBlender(file_list, zPos_list)
+    """
+    Takes in list of image filepaths as well list of camera positions and 
+    returns dictionary of given input images cropped and resized for alignment 
+    based on magnification.
+    """
+
+    # Get number of rows and cols in unresized images
+    numCols = size(load(file_list[1]))[1]
+    numRows = size(load(file_list[1]))[2]
+
+    Z1 = minimum(zPos_list)
+    Z2 = maximum(zPos_list)
+
+    # magRatio = Z2/Z1
+    magRatio = Z1/Z2
+    targetRows = floor(Int, numRows * magRatio)
+    targetCols = floor(Int, numCols * magRatio)
+
+    p = Progress(length(file_list), "Adjusting images for magnification...")
+
+    file_dict = SortedDict()
+    for x in range(1, stop=length(zPos_list))
+
+        currentDistance = zPos_list[x]
+
+        # NOTE: Reading in image as grayscale
+        img = Gray.(load(file_list[x]))
+
+        if currentDistance == Z1
+            file_dict[currentDistance] = imresize(img, (targetCols, targetRows))
+            # file_dict[currentDistance] = img
+            continue
+        end
+
+        # magRatio = currentDistance/Z1
+        magRatio = Z1 / currentDistance
+
+        scaleRows = (numRows * magRatio)
+        scaleCols = (numCols * magRatio)
+
+        rowsDiff = numRows - scaleRows
+        colsDiff = numCols - scaleCols
+
+        imgCropped = img[1+floor(Int, colsDiff/2):numCols-floor(Int, colsDiff/2),
+                         1+floor(Int, rowsDiff/2):numRows-floor(Int, rowsDiff/2)]
+
+        file_dict[currentDistance] = imresize(imgCropped, (targetCols, targetRows))
+
+        ProgressMeter.next!(p; showvalues=[(:"Magnification Ratio", magRatio), (:"rowsDiff", rowsDiff), (:"colsDiff", colsDiff)])
+
+    end
+
+    return file_dict
+
+end
+
+
+function ReadMagnificationParameters(filepath)
 end

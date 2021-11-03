@@ -8,7 +8,7 @@ struct PointCloudData
 end
 
 
-function Depth2PointCloud(img, rgbMap=None, filepath="./point_cloud.ply ")
+function Depth2PointCloud(img, rgbMap=Nothing, filepath="./point_cloud.ply ")
     """
     Takes a depth image and writes a simple XYZ point cloud to given filepath
     """
@@ -24,11 +24,16 @@ function Depth2PointCloud(img, rgbMap=None, filepath="./point_cloud.ply ")
     push!(lines, "property float x")
     push!(lines, "property float y")
     push!(lines, "property float z")
+
     push!(lines, "property uint8 red")
     push!(lines, "property uint8 green")
     push!(lines, "property uint8 blue")
+
     push!(lines, "end_header")
 
+    if rgbMap == Nothing
+        rgbMap = zeros(size(img, 1), size(img, 2), 3)
+    end
 
     # Iterate across all points in image and push to pcd file
     for y in range(1, stop=size(img, 1))
@@ -41,10 +46,10 @@ function Depth2PointCloud(img, rgbMap=None, filepath="./point_cloud.ply ")
 
             z = img[y,x]
             # z = img[y,x] * 100
+
             red = Int(round(rgbMap[y,x,1]*255))
             green = Int(round(rgbMap[y,x,2]*255))
             blue = Int(round(rgbMap[y,x,3]*255))
-
 
             push!(lines, string(x, " ", y, " ", z, " ", red, " ", green, " ", blue))
         end
@@ -91,7 +96,6 @@ function Normals2PointCloud(img, rgpMap=None, filepath="./point_cloud.ply")
             green = Int(round(rgbMap[y,x,2]*255))
             blue = Int(round(rgbMap[y,x,3]*255))
 
-
             push!(lines, string(x, " ", y, " ", z, " ", red, " ", green, " ", blue))
         end
     end
@@ -103,9 +107,6 @@ function Normals2PointCloud(img, rgpMap=None, filepath="./point_cloud.ply")
     end
 
     close(file)
-end
-
-
 end
 
 

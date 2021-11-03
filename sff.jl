@@ -196,7 +196,7 @@ function gauss3P(x, Y)
     # Get cartesian indices for a single input image
     YCartesian = CartesianIndices(YLinear[:,:,1])
 
-    # NOTE:Casting Ic to Int
+    # NOTE:Casting Ic to Int for indexing
     Ic = round.(Int, Ic)
 
     Index1 = zero(Ic)
@@ -278,26 +278,26 @@ function Depth2Normal(img)
     it to compute the surface normal at each point.
     """
 
+    img = Gray2Float64(img)
 
     normalsOut = zeros(size(img, 1)+2, size(img, 2)+2, 3)
 
-    for c in range(2, stop=size(img, 1)-1)
-        for r in range(2, stop=size(img, 2)-1)
+    for j in range(2, stop=size(img, 1)-1)
+        for i in range(2, stop=size(img, 2)-1)
 
-            # dzdx = (Float64(img[c+1, r]) - Float64(img[c-1, r])) / 2.0
-            # dzdy = (Float64(img[c, r+1]) - Float64(img[c, r-1])) / 2.0
-            # dzdx = (Float64(img[c, r+1]) - Float64(img[c, r-1])) / 2.0
-            # dzdy = (Float64(img[c+1, r]) - Float64(img[c-1, r])) / 2.0
+            # dzdx = (Float64(img[j, i+1]) - Float64(img[j, i-1])) / 2.0
+            # dzdy = (Float64(img[j+1, i]) - Float64(img[j-1, i])) / 2.0
             # d = [-dzdx, -dzdy, 1.0]
 
-            t = [ r  , c-1, Float64(img[c-1, r  ]) ]
-            l = [ r-1, c  , Float64(img[c  , r-1]) ]
-            f = [ r  ,   c, Float64(img[c  , r  ]) ]
-            d = cross( (l.-f), (t.-f) )
+            t = [ i  , j-1, Float64(img[j-1, i  ]) ]
+            f = [ i-1, j  , Float64(img[j  , i-1]) ]
+            c = [ i  , j  , Float64(img[j  , i  ]) ]
+            d = cross( (f-c), (t-c) )
 
-            n = normalize(d)
+            n = d / sqrt((sum(d.^2)))
+            # n = normalize(d)
 
-            normalsOut[c,r,:] .= n
+            normalsOut[j,i,:] .= n
 
         end
     end
