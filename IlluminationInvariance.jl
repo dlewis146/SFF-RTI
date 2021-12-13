@@ -65,8 +65,9 @@ function ComputeFullVectorGradient(file_list, angle_list, kernel="sobel")
                 # Compute focus maps
 
                 ## Make sure to normalize images with respect to brightness due to the changing of focus distance causing micro changes in aperture f-stop -- As per Subbarao & Choi
-                imgX, imgY = FilterImage(brightnessNormalize(Gray.(load(file_list[j]))), kernel) # Make sure to read in image as grayscale
-                # imgX, imgY = FilterImage(Gray.(load(file_list[j])), kernel) # Make sure to read in image as grayscale
+                # imgX, imgY = FilterImage(brightnessNormalize(Gray.(load(file_list[j]))), kernel) # Make sure to read in image as grayscale
+
+                imgX, imgY = FilterImage(Gray.(load(file_list[j])), kernel) # Make sure to read in image as grayscale
 
                 # Flatten images with vec() and then copy to appropriate
                 # array rows
@@ -75,8 +76,6 @@ function ComputeFullVectorGradient(file_list, angle_list, kernel="sobel")
             end
         end
     end
-
-    # G = (transpose(G) .* G)
 
     results = ComputeNorm(G, dPdX, dPdY, outputSize)
 
