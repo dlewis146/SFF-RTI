@@ -1,64 +1,42 @@
-function sffSimple(imageList, focusList)
+function ComputeFocusMaps(fileList, method="tenengrad")
     """
-    Takes in list of focus maps and list of focal distances and computes 
-    depth map by finding maximum image value for each pixel.
-
-        imageList::Array{Array{Float64}} - List of computed focus maps for
-                                         input images, ex) image gradients
-        
-        focusList::Array{Float64}      - List of focus distances for each 
-                                         image. Correlated to imageList by 
-                                         stored order.
+    Takes in list of file paths and returns list of computed focus maps with desired method
     """
 
-    # Get image dimensions
-    M = size(imageList[1], 1)
-    N = size(imageList[1], 2)
-    P = length(imageList)
+    # NOTE: Reads images in as grayscale
+    imageList = []
+    for file in fileList
+        img = Gray2Float64(Gray.(load(file)))
 
-    # Create focus stack of incoming images
+        focusMap = zero(img)
 
-    imageStack = zeros(size(imageList[1])[1], size(imageList[1])[2], length(imageList))
+        if method == "sobel" || method == "tenengrad"
 
-    for idx in eachindex(imageList)
+            # Compute focus maps
+            focusMapX, focusMapY = FilterImage(img , "sobel")
 
-        # Get image from given list
-        img = imageList[idx]
-
-        # Place into stack
-        imageStack[:,:,idx] = img
-    end
-
-
-    # Create empty depth map (background being NaN for parsing later)
-    depthMap = fill(NaN, (M,N))
-
-    for x in range(1, stop=size(imageStack, 1))
-        for y in range(1, stop=size(imageStack, 2))
-
-            v = imageStack[x,y,:]
-
-            # If all points are the same, assume background and keep as NaN. Check this by comparing min and max of imageStack vector
-            if (maximum(v) == minimum(v))
-                continue
+            # Handle proper addition of focus map X- and Y- components
+            if method == "sobel"
+                focusMap .= abs.( focusMapX + focusMapY )
+            elseif method == "tenengrad"
+                focusMap .= sqrt.(focusMapX.^2 + focusMapY.^2)
             end
 
-            # Find image index where estimated focus is greatest
-            idx = argmax(v)
-
-            # Save focus value as pixel value in depth map
-            depthMap[x,y] = focusList[idx]
-
+        elseif method == "sml"
+            focusMap .= SumModifiedLaplacian(img)
         end
+
+        push!(imageList, focusMap)
     end
 
-    return depthMap
+    return imageList
+
 end
 
 
-function sff(imageList, focusList)
+function sff(imageList, focusList, sampleStep=2, median=true)
     """
-    Shape from Focus algorithm originally programmed in Matlab by Said Pertuz   
+    Shape from Focus algorithm originally programmed in Matlab by Said Pertuz
 
     https://www.mathworks.com/matlabcentral/fileexchange/55103-shape-from-focus
     """
@@ -68,7 +46,7 @@ function sff(imageList, focusList)
     N = size(imageList[1], 2)
     P = length(imageList)
 
-    imageStack = zeros(size(imageList[1])[1], size(imageList[1])[2], length(imageList))
+    imageStack = zeros(M,N,P)
 
     # Create focus stack of incoming images
     for idx in eachindex(imageList)
@@ -81,124 +59,141 @@ function sff(imageList, focusList)
     end
 
     # Estimate depth map
-   YMax, zi, s, A = gauss3P(focusList, imageStack)
 
-    z = zi;
+    YMax, zi, s, A = gauss3P(focusList, imageStack, sampleStep)
+    # YMax, zi, InterpolatedFocusMeasures = GaussianInterpolation3Pt(focusList, imageStack, sampleStep)
+
+    z = zi
 
     # Shift values beyond given focus limits to nearest boundary
     z[z.>maximum(focusList)] .= maximum(focusList)
     z[z.<minimum(focusList)] .= minimum(focusList)
-    for idx in eachindex(z)
-        if z[idx] > maximum(focusList)
-            z[idx] = maximum(focusList)
-        elseif z[idx] < minimum(focusList)
-            z[idx] = minimum(focusList)
-        end
-    end
+    # for idx in eachindex(z)
+    #     if z[idx] > maximum(focusList)
+    #         z[idx] = maximum(focusList)
+    #     elseif z[idx] < minimum(focusList)
+    #         z[idx] = minimum(focusList)
+    #     end
+    # end
 
-    # NOTE:Casting YMax to Int
+    # NOTE:Casting YMax to Int for use as indices
     Ic = round.(Int, YMax)
 
     # Create and populate array to hold maximum focus value for each pixel
     # ORIG
-    fmax = ones(size(Ic))
+    fmax = zeros(size(Ic))
     fmax .= focusList[Ic]
-    ## fmax .= focusList[YMax]
 
+    # z[isnan.(z)] .= 0
     z[isnan.(z)] = fmax[isnan.(z)]
 
     ## Median filter
-    # @printf("\nRunning Z through median filter with size (3,3)...")
-    # z = mapwindow(median, z, (3,3))
+    if median == true
+        @printf("\nRunning Z through median filter with size (3,3)...")
+        z = mapwindow(median!, z, (3,3))
+    end
+
+    # @printf("\nWARNING: Not returning interpolated depth map.\n")
+    # return fmax
 
     ## Reliability measure
-
+ 
     # R = RMeasure(imageStack, focusList, zi, fmax)
 
     errorArray = zeros(M, N)
-    
+
     for k in range(1, stop=size(focusList,1))
         errorArray = errorArray + abs.(imageStack[:,:,k] - A.*exp.(-(focusList[k] .- zi).^2 ./ (2*s.^2)))
     end
 
     errorArray = errorArray./(fmax.*size(focusList, 1))
 
-    # @printf("\nRunning errorArray through averaging filter with size (3,3)...")
-    # averagingKernel = fill(1/9, (3,3))
-    # errorArray = imfilter(errorArray, averagingKernel)
+    @printf("\nRunning errorArray through averaging filter with size (3,3)...")
+    errorArray = FilterImageAverage(errorArray, (3,3))
 
     R = 20*log10.(P*fmax./errorArray)
     mask = isnan.(zi)
-    
+
     R[mask] .= 0
     R[R.<0] .= 0
     R[isnan.(R)] .= 0
 
+    # return z
     return z, R
 
 end
 
 
-function GaussianInterpolation3Pt(x, imageStack, step=2)
+function GaussianInterpolation3Pt(x, imageStack, Gstep=2)
 
     M,N,P = size(imageStack)
 
     # Find maximum value along Z dimension for each pixel
-    idxMax = argmax(imageStack, dims=3)
-    ZMax = imageStack[idxMax]
+    coordsMax = argmax(imageStack, dims=3)
+    
+    idxMax = zeros(Int8, M, N)
+    for idx in eachindex(coordsMax) idxMax[idx] = Int(coordsMax[idx][3]) end
 
-    # Make sure depth values are within boundaries of 3D interpolation window, 
-    # AKA make sure that if we step from a max focus point to do interpolation, 
+    # Make sure depth values are within boundaries of 3D interpolation window,
+    # AKA make sure that if we Gstep from a max focus point to do interpolation,
     # make sure we're not going to try and access a point outside of our scope
-    ZMaxPadded = zero(ZMax)
-    ZMaxPadded[ZMax.<=step] = step+1
-    ZMaxPadded[ZMax.>=P-step] = p-step
+    idxMaxPadded = fill(Gstep+1, (M,N))
+    idxMaxPadded[idxMax.>=(P-Gstep)] .= P-Gstep
 
     # NOTE:Casting ZMaxPadded to Int for use as indexing into imageStack
-    ZMaxPadded = round.(Int, ZMaxPadded)
+    # ZMaxPadded = round.(Int, ZMaxPadded)
 
-    interpolatedOut = zero(ZMax)
-    errorOut = zero(ZMax)
+    interpolatedD = zeros(Float64, M, N)
+    interpolatedF = zeros(Float64, M, N)
+    # errorOut = zeros(M,N)
 
     # For each pixel, interpolate Guassian over three images in determined peak region
     for i in range(1, stop=M)
-        for j in range(1, stop=N) 
+        for j in range(1, stop=N)
 
-            z = ZMaxPadded[i,j]
+            z = idxMaxPadded[i,j]
 
+            # TEMP SCALE
             # Gather focus values and determined depth values
-            yLow  = imageStack[i,j,z-step]
-            yMid  = imageStack[i,j,z]
-            yHigh = imageStack[i,j,z+step]
+            # yLow  = imageStack[i,j,z-Gstep] * 255
+            # yMid  = imageStack[i,j,z] * 255
+            # yHigh = imageStack[i,j,z+Gstep] * 255
 
-            xLow  = x[z-step]
+            yLow  = imageStack[i,j,z-Gstep]
+            yMid  = imageStack[i,j,z]
+            yHigh = imageStack[i,j,z+Gstep]
+
+
+            xLow  = x[z-Gstep]
             xMid  = x[z]
-            xHigh = x[z+step]
+            xHigh = x[z+Gstep]
 
             # Compute Gaussian distribution parameters
-            dBar = ( (ln(yMid) - ln(yHigh)) * (xMid^2 - xLow^2) ) / ( 2*(xMid-xLow) * ( (ln(yMid) - ln(yLow)) + (ln(yMid) - ln(yHigh)) )  )
-            dBar = dBar - ( ( (ln(yMid) - ln(yLow)) * (xMid^2 - xHigh^2) ) / ( 2*(xMid-xLow) * ( (ln(yMid) - ln(yLow)) + (ln(yMid) - ln(yHigh)) )  ) )
+            dBar = ( ((log(yMid) - log(yHigh)) * (xMid^2 - xLow^2)) - ((log(yMid) - log(yLow)) * (xMid^2 - xHigh^2)) ) / ( 2 * (xMid-xLow) * ( (log(yMid) - log(yLow)) + (log(yMid) - log(yHigh)) ) )
+                
+            sigmaF = -(((xMid^2 - xLow^2) + (xMid^2 - xHigh^2) ) / (2 * ( (log(yMid) - log(yLow)) + (log(yMid) - log(yHigh)))))
 
-            sigmaF = - ( (xMid^2 - xLow^2) + (xMid^2 xHigh^2) ) / ( 2* ( (ln(yMid) - ln(yLow)) + (ln(yMid) - ln(yHigh)) ) ) 
+            # sigmaF = -((xMid^2 - xLow^2) + (xMid^2 + xHigh^2)) / (2 * ( (log(yMid) - log(yLow)) + (log(yMid) - log(yHigh))))
 
-            # Interpolate depth value and place in output depth map
-            interpolatedOut[i,j] = ( yMid / ( e( (-1/2) * ((xMid-dBar)/sigmaF)^2 ) ) )
+            # Interpolate focus value and place focus and depth values in respective maps
+            interpolatedF[i,j] = ( yMid / ( exp( (-1/2) * (((xMid-dBar)/sigmaF)^2) ) ) )
+            interpolatedD[i,j] = dBar
 
         end
     end
 
-    return interpolatedOut
+    return idxMax, interpolatedD, interpolatedF
+    # return interpolatedD, interpolatedF, idxMax
+    # return interpolatedOut, idxMax
 end
 
 
-function gauss3P(x, Y)
+function gauss3P(x, Y, Gstep=2)
     """
     For use by `sff`
 
     Interpolates focus measures to create a smoother depth map using a Guassian distribution sampled at three points in the peak region of the focus measure
     """
-
-    STEP = 2
 
     M,N,P = size(Y)
 
@@ -220,17 +215,17 @@ function gauss3P(x, Y)
     YMax = round.(Int, YMax)
 
     Ic = zero(YMax)
-    # For all values of Ic that are <= STEP, set to STEP+1
-    # Ic[Ic .<= STEP] .= (STEP+1)
-    # For all values of Ic that are >= P-STEP, set to P-STEP
-    # Ic[Ic .>= (P-STEP)] .= (P-STEP)
+    # For all values of Ic that are <= Gstep, set to Gstep+1
+    # Ic[Ic .<= Gstep] .= (Gstep+1)
+    # For all values of Ic that are >= P-Gstep, set to P-Gstep
+    # Ic[Ic .>= (P-Gstep)] .= (P-Gstep)
     for idx in eachindex(YMax)
         I_val = YMax[idx]
 
-        if I_val <= STEP
-            Ic[idx] = STEP+1
-        elseif I_val >= P-STEP
-            Ic[idx] = P-STEP
+        if I_val <= Gstep
+            Ic[idx] = Gstep+1
+        elseif I_val >= P-Gstep
+            Ic[idx] = P-Gstep
         else
             Ic[idx] = I_val
         end
@@ -257,9 +252,9 @@ function gauss3P(x, Y)
 
         Ic_val = Ic[idx]
 
-        Index1[idx] = YLinear[c, r, Ic_val-STEP]
+        Index1[idx] = YLinear[c, r, Ic_val-Gstep]
         Index2[idx] = YLinear[c, r, Ic_val]
-        Index3[idx] = YLinear[c, r, Ic_val+STEP]
+        Index3[idx] = YLinear[c, r, Ic_val+Gstep]
     end
 
     x1 = zeros(M,N)
@@ -273,9 +268,9 @@ function gauss3P(x, Y)
 
         Ic_val = Ic[idx]
 
-        x1[idx] = x[Ic_val - STEP]
+        x1[idx] = x[Ic_val - Gstep]
         x2[idx] = x[Ic_val]
-        x3[idx] = x[Ic_val + STEP]
+        x3[idx] = x[Ic_val + Gstep]
 
     end
 
@@ -321,16 +316,16 @@ end
 
 function Depth2Normal(img)
     """
-    Takes in (m x n) image (depth map) and uses 
+    Takes in (m x n) image (depth map) and uses
     it to compute the surface normal at each point.
-    
+
     Returns 3D array of normals where the channels are:
         1st channel - X-component of normal
         2nd channel - Y-component of normal
         3rd channel - Z-component of normal
     """
 
-    img = Gray2Float64(img)
+    # img = Gray2Float64(img)
 
     normalsOut = zeros(size(img, 1)+2, size(img, 2)+2, 3)
 
@@ -339,15 +334,11 @@ function Depth2Normal(img)
 
             dzdx = (Float64(img[j, i+1]) - Float64(img[j, i-1])) / 2.0
             dzdy = (Float64(img[j+1, i]) - Float64(img[j-1, i])) / 2.0
-            d = [-dzdx, -dzdy, 1.0]
+            # d = [-dzdx, -dzdy, Float64(1.0/255)]
+            d = [-dzdx, -dzdy, 1.0/255]
 
-            # t = [ i  , j-1, Float64(img[j-1, i  ]) ]
-            # f = [ i-1, j  , Float64(img[j  , i-1]) ]
-            # c = [ i  , j  , Float64(img[j  , i  ]) ]
-            # d = cross( (f-c), (t-c) )
-
-            n = d / sqrt((sum(d.^2)))
-            # n = normalize(d)
+            # n = d / sqrt((sum(d.^2)))
+            n = normalize(d)
 
             normalsOut[j,i,:] .= n
 
