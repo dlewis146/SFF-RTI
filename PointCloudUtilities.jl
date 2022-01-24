@@ -39,13 +39,12 @@ function Depth2PointCloud(img, rgbMap=Nothing, filepath="./point_cloud.ply ")
     for y in range(1, stop=size(img, 1))
         for x in range(1, stop=size(img, 2))
 
-            # If NaN, skip point.
+            # If NaN, skip point
             if isnan(img[y,x])
                 continue
             end
 
             z = img[y,x]
-            # z = img[y,x] * 100
 
             red = Int(round(rgbMap[y,x,1]*255))
             green = Int(round(rgbMap[y,x,2]*255))
@@ -65,7 +64,7 @@ function Depth2PointCloud(img, rgbMap=Nothing, filepath="./point_cloud.ply ")
 end
 
 
-function Normals2PointCloud(img, rgpMap=None, filepath="./point_cloud.ply")
+function Normals2PointCloud(img, rgpMap=Nothing, filepath="./point_cloud.ply")
 
     """
     Takes a normal map and writes a simple XYZ point cloud to given filepath
@@ -96,7 +95,7 @@ function Normals2PointCloud(img, rgpMap=None, filepath="./point_cloud.ply")
             green = Int(round(rgbMap[y,x,2]*255))
             blue = Int(round(rgbMap[y,x,3]*255))
 
-            push!(lines, string(x, " ", y, " ", z, " ", red, " ", green, " ", blue))
+            push!(lines, string(nx, " ", ny, " ", nz, " ", red, " ", green, " ", blue))
         end
     end
 
@@ -109,6 +108,112 @@ function Normals2PointCloud(img, rgpMap=None, filepath="./point_cloud.ply")
     close(file)
 end
 
+function Maps2PointCloud(depthMap=nothing, normalsMap=nothing, rgbMap=nothing, filepath="./point_cloud.ply")
+    """
+    Takes any given information maps (RGB, depth, surface normals) and constructs a point cloud. 
+
+    NOTE: This is a "dumb" process and doesn't seek to geometrically correlate any of the maps. It is
+    assumed that the maps are correlated pixelwise.
+
+    Input parameters: 
+
+        depthMap - (m x n) array where each pixel value is representative of the distance of the imaged surface from the camera
+
+        normalsMap - (m x n x 3) array where each pixel is 3-dimensional vector that describes the direction of the surface normal at that point. Of the three encoded bands stored in the third dimension, the assignments are as follows:
+                        1st - X-component of normal vector
+                        2nd - Y-component of normal vector
+                        3rd - Z-component of normal vector
+
+        rgbMap - (m x n) array that is simply the RGB image to be used for viewing the image. 
+
+        filepath - String representing relative output filepath
+
+    """
+
+    if (depthMap === nothing) && (normalsMap === nothing) && (rgbMap === nothing)
+        error("No input maps given to `Maps2PointCloud`")
+    end
+
+    # Find number of NaN in depth map
+    numNaN = count(isnan.(depthMap))
+
+    # Create header lines
+    lines = String[]
+    push!(lines, "ply")
+    push!(lines, "format ascii 1.0")
+
+    push!(lines, string("element vertex ", length(depthMap)-numNaN))
+
+    push!(lines, "property float x")
+    push!(lines, "property float y")
+
+    if depthMap !== nothing
+        push!(lines, "property float z")
+    end
+
+    if normalsMap !== nothing
+        push!(lines, "property float nx")
+        push!(lines, "property float ny")
+        push!(lines, "property float nz")
+    end
+
+    if rgbMap !== nothing
+        push!(lines, "property uint8 red")
+        push!(lines, "property uint8 green")
+        push!(lines, "property uint8 blue")
+    end
+
+    push!(lines, "end_header")
+
+        # Iterate across all points in image and push to pcd file
+        for y in range(1, stop=size(depthMap, 1))
+            for x in range(1, stop=size(depthMap, 2))
+    
+                lineBuild = string(x, " ", y, " ")
+
+                if depthMap !== nothing
+                    # If NaN, skip point
+                    if isnan(depthMap[y,x])
+                        continue
+                    end
+
+                    # Get depth value
+                    z = depthMap[y,x] * 100
+                    # z = depthMap[y,x]
+                    lineBuild = lineBuild * string(z, " ")
+                end
+
+                if normalsMap !== nothing
+                    # Get surface normal component values
+                    nx = normalsMap[y,x,1]
+                    ny = normalsMap[y,x,2]
+                    nz = normalsMap[y,x,3]
+                    lineBuild = lineBuild * string(nx, " ", ny, " ", nz, " ")
+                end
+
+                if rgbMap !== nothing
+                    # Get RGB values
+                    red = Int(round(rgbMap[y,x,1]*255))
+                    green = Int(round(rgbMap[y,x,2]*255))
+                    blue = Int(round(rgbMap[y,x,3]*255))
+                    lineBuild = lineBuild * string(red, " ", green, " ", blue)
+                end
+
+                # Push new line into `lines`
+                push!(lines, lineBuild)
+            end
+        end
+
+        # Write lines to file
+        file = open(filepath, "w")
+        for line in lines
+            write(file, line)
+            write(file, "\n")
+        end
+    
+        close(file)
+
+end
 
 function ReadPointCloud(filepath)
     """
