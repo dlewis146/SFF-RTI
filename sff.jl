@@ -63,7 +63,20 @@ function sff(imageList, focusList, sampleStep=2, median=true)
     YMax, zi, s, A = gauss3P(focusList, imageStack, sampleStep)
     # YMax, zi, InterpolatedFocusMeasures = GaussianInterpolation3Pt(focusList, imageStack, sampleStep)
 
-    z = zi
+    z = real.(zi)
+    # z = zi
+
+    # NOTE:Casting YMax to Int for use as indices
+    Ic = round.(Int, YMax)
+
+    # Create and populate array to hold maximum focus value for each pixel
+    # ORIG
+    fmax = zeros(size(Ic))
+    fmax .= focusList[Ic]
+
+    # z[isnan.(z)] .= 0
+    z[isnan.(z)] = fmax[isnan.(z)]
+
 
     # Shift values beyond given focus limits to nearest boundary
     z[z.>maximum(focusList)] .= maximum(focusList)
@@ -77,15 +90,15 @@ function sff(imageList, focusList, sampleStep=2, median=true)
     # end
 
     # NOTE:Casting YMax to Int for use as indices
-    Ic = round.(Int, YMax)
+    # Ic = round.(Int, YMax)
 
-    # Create and populate array to hold maximum focus value for each pixel
-    # ORIG
-    fmax = zeros(size(Ic))
-    fmax .= focusList[Ic]
+    # # Create and populate array to hold maximum focus value for each pixel
+    # # ORIG
+    # fmax = zeros(size(Ic))
+    # fmax .= focusList[Ic]
 
-    # z[isnan.(z)] .= 0
-    z[isnan.(z)] = fmax[isnan.(z)]
+    # # z[isnan.(z)] .= 0
+    # z[isnan.(z)] = fmax[isnan.(z)]
 
     ## Median filter
     if median == true
@@ -289,25 +302,21 @@ function gauss3P(x, Y, Gstep=2)
     a = y1 - b.*x1 - c.*x1.^2
 
     # s = zero(c)
+    # s = zeros(UInt16, size(c))
     s = zeros(ComplexF64, size(c))
     for idx in eachindex(c)
-        # println(idx, " @ sqrt(-1/(2*", c[idx], ")")
         if isnan(c[idx])
             s[idx] = sqrt( -1 / (2*c[idx]))
         else
             s[idx] = sqrt(Complex(-1 / (2*c[idx])))
         end
     end
-    # s[idx] = sqrt(-1 / (2*c[idx]))
-    # println()
-    # println(Y[459098])
-    # println()
-    # s = sqrt.(-1 ./ (2*c))
-    # s = sqrt(-1./(2*c))
-    u = b.*float32.(real.(s)).^2
-    # u = b.*s.^2
-    A = exp.(a + (u.^2)./(2*float32.(real.(s).^2)))
-    # A = exp(a + u.^2./(2*s.^2))
+
+    u = b.*s.^2
+    # u = b.*float32.(real.(s)).^2
+
+    A = exp.(a + (u.^2)./(2*(s.^2)))
+    # A = exp.(a + (u.^2)./(2*float32.(real.(s).^2)))
 
     return YMax, u, s, A
 
