@@ -70,35 +70,15 @@ function sff(imageList, focusList, sampleStep=2, median=true)
     Ic = round.(Int, YMax)
 
     # Create and populate array to hold maximum focus value for each pixel
-    # ORIG
     fmax = zeros(size(Ic))
     fmax .= focusList[Ic]
 
     # z[isnan.(z)] .= 0
     z[isnan.(z)] = fmax[isnan.(z)]
 
-
     # Shift values beyond given focus limits to nearest boundary
     z[z.>maximum(focusList)] .= maximum(focusList)
     z[z.<minimum(focusList)] .= minimum(focusList)
-    # for idx in eachindex(z)
-    #     if z[idx] > maximum(focusList)
-    #         z[idx] = maximum(focusList)
-    #     elseif z[idx] < minimum(focusList)
-    #         z[idx] = minimum(focusList)
-    #     end
-    # end
-
-    # NOTE:Casting YMax to Int for use as indices
-    # Ic = round.(Int, YMax)
-
-    # # Create and populate array to hold maximum focus value for each pixel
-    # # ORIG
-    # fmax = zeros(size(Ic))
-    # fmax .= focusList[Ic]
-
-    # # z[isnan.(z)] .= 0
-    # z[isnan.(z)] = fmax[isnan.(z)]
 
     ## Median filter
     if median == true
@@ -106,13 +86,8 @@ function sff(imageList, focusList, sampleStep=2, median=true)
         z = mapwindow(median!, z, (3,3))
     end
 
-    # @printf("\nWARNING: Not returning interpolated depth map.\n")
-    # return fmax
-
     ## Reliability measure
  
-    # R = RMeasure(imageStack, focusList, zi, fmax)
-
     errorArray = zeros(M, N)
 
     for k in range(1, stop=size(focusList,1))
@@ -131,7 +106,6 @@ function sff(imageList, focusList, sampleStep=2, median=true)
     R[R.<0] .= 0
     R[isnan.(R)] .= 0
 
-    # return z
     return z, R
 
 end

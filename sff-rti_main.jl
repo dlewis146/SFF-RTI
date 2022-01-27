@@ -19,11 +19,6 @@ zPosList = reverse(unique([row.z_cam for row in CSV.File(csvPath; select=["z_cam
 
 fvgList = []
 
-## PREP FOR WRITING OUT FVG IMAGES
-# If directory doesn't exist, create it
-# outputFolder = "./FVG_OUT"
-# ispath(outputFolder) || mkpath(outputFolder)
-
 prog = Progress(length(zPosList), "Computing full vector gradient images...")
 
 # Compute FVG for each Z position
@@ -50,13 +45,17 @@ for idx in eachindex(zPosList)
     end
 
     # Compute FVG
-    imgFVG = ComputeFullVectorGradient(fileList, angleList, "sobel")
+    focusMap = ComputeFullVectorGradient(fileList, angleList, "sml")
 
     # Average FVG image
-    focusMap = FilterImageAverage(imgFVG)
+    focusMap = FilterImageAverage(focusMap)
+
+    # Centering image values attempts to push dynamic range so that all values are positive and will no longer give errors when computing logs during Gaussian interpolation
+    # focusMap = abs.(focusMap)
+    focusMap = imageCenterValues(focusMap)
 
     # Store FVG in list and iterate progress bar
-    push!(fvgList, imgFVG)
+    push!(fvgList, focusMap)
     ProgressMeter.next!(prog; showvalues= [(:"Current Distance", zPosList[idx])])
 end
 

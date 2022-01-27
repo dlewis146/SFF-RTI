@@ -1,4 +1,4 @@
-using LinearAlgebra, Glob, Images, ImageView, CSV, DataFrames, Printf, PlotlyJS
+using LinearAlgebra, Glob, Images, ImageView, Gtk, CSV, DataFrames, Printf
 
 include("./sff.jl")
 include("./ImageUtilities.jl")
@@ -13,20 +13,10 @@ folderPath = base*"/Renders/"
 fileList = glob("*.png", folderPath)
 csvPath = base*"/Image.csv"
 
-# ROI = Nothing
-# ROI = [(850, 150), (1175, 150), (850, 650), (1175, 650)]
-# ROI = [(926, 199), (1096, 199), (926, 535), (1096, 535)]
-
 # Compute focus maps and store in array
 imageList = []
 for file in fileList
-    # img = Gray2UInt16(load(file))
-    # img = Gray2Float64(load(file))
     img = Gray.(load(file))
-
-    # if ROI != Nothing
-        # img = img[ROI[1][2]:ROI[3][2], ROI[1][1]:ROI[2][1]]
-    # end
 
     # focusMapX, focusMapY = FilterImage(img, "sobel")
 
@@ -36,7 +26,7 @@ for file in fileList
     focusMap = SumModifiedLaplacian(img)
 
     # Average filter focus map
-    focusMap = FilterImageAverage(focusMap)
+    focusMap = FilterImageAverage(focusMap, (3,3))
 
     push!(imageList, focusMap)
 end
@@ -49,8 +39,6 @@ focusList = reverse([row.z_cam for row in focusList])
 # Z = sff(imageList, focusList)
 Z, R = sff(imageList, focusList, 2, true)
 
-Z = FilterNaNs(Z, maximum(focusList))
-
 # Carve depth map with R
 # R<20 is unreliable
 ZC = Z
@@ -58,8 +46,6 @@ ZC[R.<20] .= minimum(focusList)
 
 RC = ones(size(R))
 RC[R.<20] .= 0
-# RC[R.<20] .= mapwindow(median, RC, (3,3))     
-
 RC = Gray.(RC)
 
 # Compute normals from depth map
