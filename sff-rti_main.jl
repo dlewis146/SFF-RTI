@@ -44,7 +44,6 @@ for f in innerFolderList
 
             rmseList[f,method,kernel]  = rmse(GT, Z_normalized)
             irmseList[f,method,kernel] = 1-rmseList[f,method,kernel]
-            # irmseList[f,method] = InverseRMSE(GT, Z_normalized)
         end
     end
 end
