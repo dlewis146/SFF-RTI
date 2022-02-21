@@ -26,7 +26,37 @@ function ReadImageList(file_list, grayscale=true)
     return img_list
 end
 
-function FilterImage(img, filter="sobel")
+function FilterImageCombined(img, filter="sobel")
+    """
+    This function is written with the purpose of being a "handler" function
+    for filtering images. As it seems the calls for filtering images with
+    standard kernels varies within the imfilter package, this function is
+    meant to make that easier for the user.
+    """
+
+    img = Gray2Float64(img)
+    imgOut = zero(img)
+
+    if filter == "teng" || filter == "sobel"
+
+        Sx = [1 2 1 ; 0 0 0 ; -1 -2 -1]
+        Sy = [-1 0 1 ; -2 0 2 ; -1 0 1]
+        imgX = imfilter(img, Sx, "replicate")
+        imgY = imfilter(img, Sy, "replicate")
+
+        imgOut = sqrt.(imgX.^2 + imgY.^2)
+
+    elseif filter == "sml"
+
+        imgOut = SumModifiedLaplacian(img)
+
+    end
+
+    return imgOut
+
+end
+
+function FilterImageSeparate(img, filter="sobel")
     """
     This function is written with the purpose of being a "handler" function
     for filtering images. As it seems the calls for filtering images with
@@ -55,6 +85,8 @@ function FilterImage(img, filter="sobel")
 
 end
 
+
+
 function FilterImageAverage(img, KSize=(3,3), edges="replicate")
     """
     Takes in image, desired kernel size, and method of handling edge cases.
@@ -67,6 +99,41 @@ function FilterImageAverage(img, KSize=(3,3), edges="replicate")
     imgOut = imfilter(img, A, edges) / length(A)
 
     return imgOut
+
+end
+
+function ComputeMeanImage(imageList)
+
+    meanImageBuild = zero(imageList[1])
+
+    for image in imageList
+        meanImageBuild = meanImageBuild + image
+    end
+
+    meanImageBuild = meanImageBuild / length(imageList)
+
+    return meanImageBuild
+
+end
+
+function ComputeSTDImage(imageList)
+
+    stdImageStack = zeros(size(imageList[1], 1), size(imageList[1], 2), length(imageList))
+
+    for idx in range(1, stop=length(imageList))
+        stdImageStack[:,:,idx] = imageList[idx]
+    end
+
+    stdImageOut = zero(imageList[1])
+
+    for y in range(1, stop=size(stdImageStack, 1))
+        for x in range(1, stop=size(stdImageStack, 2))
+
+            stdImageOut[y,x] = std(stdImageStack[y,x,:])
+        end
+    end
+
+    return stdImageOut
 
 end
 
@@ -187,9 +254,26 @@ end
 
 function Gray2Float64(img) convert(Array{Float64}, Gray.(img)) end
 
+function RGB2Float64(img)
+    
+    # Translate RGB image into channel view with expected dimensional order
+    img = permutedims(channelview(img), (2,3,1))
+
+    # Create placeholder output array
+    imgOut = zeros(size(img))
+
+    # Convert bands into Float64 and place in output array
+    for band in range(1, stop=size(img, 3))
+        imgOut[:,:,band] = convert(Array{Float64}, img[:,:,band])
+    end
+
+    return imgOut
+end
+
 ## Visualiation / Normalization functions
 
-function imageDisp01(img) img.+abs(minimum(img)) end
+# function imageDisp01(img) img.+abs(minimum(img)) end
+function imageDisp01(img); (img.-minimum(img))/(maximum(img)-minimum(img)) end
 
 function shiftNormalsRange(img) imageNormalize(imageDisp01(img)) end
 

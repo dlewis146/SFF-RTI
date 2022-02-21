@@ -63,7 +63,7 @@ function ComputeFullVectorGradient(file_list, angle_list, kernel="sobel")
                 # Normalize images with respect to brightness due to the changing of focus distance causing micro changes in aperture f-stop -- As per Subbarao & Choi
                 # img = brightnessNormalize(img)
 
-                imgX, imgY = FilterImage(img, kernel)
+                imgX, imgY = FilterImageSeparate(img, kernel)
 
                 # Flatten images with vec() and then copy to appropriate
                 # array rows

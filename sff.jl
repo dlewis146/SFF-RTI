@@ -73,7 +73,7 @@ function sff(imageList, focusList, sampleStep=2, median=true)
     fmax = zeros(size(Ic))
     fmax .= focusList[Ic]
 
-    # z[isnan.(z)] .= 0
+    # z[isnan.(z)] .= maximum(focusList)
     z[isnan.(z)] = fmax[isnan.(z)]
 
     # Shift values beyond given focus limits to nearest boundary
@@ -82,7 +82,7 @@ function sff(imageList, focusList, sampleStep=2, median=true)
 
     ## Median filter
     if median == true
-        @printf("\nRunning Z through median filter with size (3,3)...")
+        println("Running Z through median filter with size (3,3)...")
         z = mapwindow(median!, z, (3,3))
     end
 
@@ -96,7 +96,7 @@ function sff(imageList, focusList, sampleStep=2, median=true)
 
     errorArray = errorArray./(fmax.*size(focusList, 1))
 
-    @printf("\nRunning errorArray through averaging filter with size (3,3)...")
+    println("Running errorArray through averaging filter with size (3,3)...")
     errorArray = FilterImageAverage(errorArray, (3,3))
 
     R = 20*log10.(P*fmax./errorArray)
