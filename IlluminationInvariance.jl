@@ -30,11 +30,11 @@ function ComputeFullVectorGradient(file_list, angle_list, kernel="sobel")
 
     for i in range(1, stop=numImages)
 
-        # Read Cartesian coordinates from respective input object (Assume degrees)
-        angleObj = angle_list[i]
-        x1 = round(angleObj.x; digits=5)
-        y1 = round(angleObj.y; digits=5)
-        z1 = round(angleObj.z; digits=5)
+        # Read Cartesian coordinates from respective input object (assume degrees) and place in vector, rounding to 5 digits
+        vec1 = vec([round(angle_list[i].x; digits=5),
+                    round(angle_list[i].y; digits=5),
+                    round(angle_list[i].z; digits=5)
+                    ])
 
         for j in range(1, stop=numImages)
 
@@ -45,23 +45,20 @@ function ComputeFullVectorGradient(file_list, angle_list, kernel="sobel")
                 continue
             end
 
-            # Read Cartesian coordinates from respective input object (Assume degrees)
-            angleObj = angle_list[j]
-            x2 = round(angleObj.x; digits=5)
-            y2 = round(angleObj.y; digits=5)
-            z2 = round(angleObj.z; digits=5)
+            # Read Cartesian coordinates from respective input object (assume degrees) and place in vector, rounding to five digits
+            vec2 = vec([round(angle_list[j].x; digits=5),
+                        round(angle_list[j].y; digits=5),
+                        round(angle_list[j].z; digits=5)
+                        ])
 
             # Compute cosine similarity between angles
-            G[i,j] = 1 - acos( round((x1*x2 + y1*y2 + z1*z2) / (sqrt(x1^2 + y1^2 + z1^2) * sqrt(x2^2 + y2^2 + z2^2)); digits=5) )
+            G[i,j] = round(dot(vec1,vec2) / (norm(vec1) * norm(vec2)); digits=5)
 
             # Check if we're on our first run through the images
             if i == 1
 
                 # Compute focus maps for image in `file_list` at `j`
                 img = Gray.(load(file_list[j]))
-
-                # Normalize images with respect to brightness due to the changing of focus distance causing micro changes in aperture f-stop -- As per Subbarao & Choi
-                # img = brightnessNormalize(img)
 
                 imgX, imgY = FilterImageSeparate(img, kernel)
 
