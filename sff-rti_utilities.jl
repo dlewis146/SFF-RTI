@@ -49,13 +49,8 @@ function WriteMaps(structList, outputFolder, ZMax=nothing, RMax=nothing)
     for s in structList
         # outputFolder = outputBase*s.folderName
 
-        normals = zeros(size(s.Z, 1), size(s.Z, 2), 3)
-        if s.method == "SFF"
-            normals = Depth2Normal(complement.(s.Z))
-        else
-            normals = Depth2Normal(s.Z)
-        end
-        # normals = Depth2Normal(s.Z)
+        normals = Depth2Normal(s.Z)
+
         normalsX = shiftNormalsRange(normals[:,:,1])
         normalsY = shiftNormalsRange(normals[:,:,2])
         normalsZ = shiftNormalsRange(normals[:,:,3])
@@ -71,14 +66,47 @@ function WriteMaps(structList, outputFolder, ZMax=nothing, RMax=nothing)
     end
 end
 
-function WriteCSV(outputPath, folderList, methodList, kernelList, rmseList, irmseList, ZMax, RMax)
+function WriteCSV(outputPath::String, folderList::Array{String}, methodList::Array{String}, kernelList::Array{String}, rmseList::Dict, irmseList::Dict, ZMax::Float64, RMax::Float64, snrDict::Dict, psnrDict::Dict)
 
     # Write out comparison results
     println("Writing results to text file...")
     open(outputPath, "w") do io
 
         # Write header
-        write(io, "numRTI,numSFF,method,kernel,rmse,inverse rmse,Z normalization coefficient,R normalization coefficient\n")
+        write(io, "numRTI,numSFF,method,kernel,rmse,inverse rmse,average snr,average psnr,Z normalization coefficient,R normalization coefficient\n")
+
+        for f in folderList
+            for method in methodList
+
+                # Parse inputs for proper number of RTI and SFF based on method used
+                numRTI = 0
+                numSFF = 0
+
+                if lowercase(method) == "sff"
+                    numRTI = 0
+                    numSFF = parse(Int64, f)
+                elseif lowercase(method) != "sff"
+                    numRTI, numSFF = ParseFolderName(f)
+                end
+
+                for kernel in kernelList
+                    # Create and write line to CSV
+                    lineOut = string(numRTI, ",", numSFF, ",", method, ",", kernel, ",", rmseList[f,method,kernel], ",", irmseList[f,method,kernel], ",", snrDict[f,method,kernel], ",", psnrDict[f,method,kernel], ",", ZMax, ",", RMax, "\n")
+                    write(io, lineOut)
+                end
+            end
+        end
+    end
+end
+
+function WriteCSV(outputPath::String, folderList::Array{String}, methodList::Array{String}, kernelList::Array{String}, rmseList::Dict, irmseList::Dict, ZMax::Float64, RMax::Float64)
+
+    # Write out comparison results
+    println("Writing results to text file...")
+    open(outputPath, "w") do io
+
+        # Write header
+        write(io, "numRTI,numSFF,method,kernel,rmse,inverse rmse,average snr,average psnr,Z normalization coefficient,R normalization coefficient\n")
 
         for f in folderList
             for method in methodList

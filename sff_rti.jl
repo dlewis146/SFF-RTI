@@ -8,7 +8,47 @@ include("./ImageUtilities.jl")
 global ACCEPTED_METHODS = ["fvg", "mean", "std"]
 global ACCEPTED_KERNELS = ["sml", "sobel"]
 
-function sff_rti(baseFolder, method="fvg", kernel="sobel", outputFolder=nothing, write_maps=false)
+function FindSFFEquivalent(baseFolder)
+    """
+    This highly specific function takes in a given foldername for an SFF-RTI acquisition
+    (named using standardized format), parses it for the number of Z (SFF) positions, 
+    and searches for an equivalent SFF acquisition in the same folder that `SFFRTI` is
+    located. Assumes that the SFF acquisitions are in folders named solely with their
+    number of Z positions. 
+
+    Example: SFF-RTI acquisition folder: `.../SFFRTI/RTI_4_SFF_20/`
+             Equivalent SFF folder:      `.../SFF/20/`
+    """
+
+    _, numSFF = ParseFolderName(basename(baseFolder))
+
+    # NOTE: Assumes path format of "{DRIVE}/Research/Generated Data/Blender/{OBJECT TITLE}/{METHOD}/
+    folderName = ""
+
+    if splitpath(baseFolder)[lastindex(splitpath(baseFolder))-1] != "SFFRTI"
+        
+        # Get base path up through the main object folder
+        folderName = join(splitpath(baseFolder)[1:lastindex(splitpath(baseFolder))-3], "/")
+
+        # Create expected SFF folder path
+        folderName = folderName*"/SFF/"*splitpath(baseFolder)[lastindex(splitpath(baseFolder))-1]*"/"*numSFF*"/"
+    else
+        # Get base path up through the main object folder
+        folderName = join(splitpath(baseFolder)[1:lastindex(splitpath(baseFolder))-2], "/")
+
+        # Create expected SFF folder path
+        folderName = folderName*"/SFF/"*numSFF*"/"
+    end
+   
+    # Make sure there aren't multiple CSV files in the base path
+    if isdir(folderName) == false
+        error(@printf("\nCannot find equivalent SFF acquisition for `%s`\n", basename(baseFolder)))
+    end
+
+    return folderName
+end
+
+function sff_rti(baseFolder, method="fvg", kernel="sobel", outputFolder=nothing, write_maps=false, compute_snr=false)
 
     # Make sure that `method` and `kernel` are lowercase for parsing compatibility
     method = lowercase(method)
@@ -34,6 +74,28 @@ function sff_rti(baseFolder, method="fvg", kernel="sobel", outputFolder=nothing,
 
     # Get all the XYZ camera positions in CSV.row structs
     rowList = CSV.File(csvPath; select=["image", "x_lamp", "y_lamp", "z_lamp", "z_cam"])
+
+    sffCSV = nothing
+    sffFolderPath = ""
+    snrDict = Dict()
+    psnrDict = Dict()
+
+    if compute_snr == true
+        # Find equivalent SFF data collection
+        sffFolderPath = FindSFFEquivalent(baseFolder)
+
+        # Make sure there aren't multiple CSV files in the base path
+        if length(glob("*.csv", sffFolderPath)) > 1
+            error(@printf("\nMore than 1 CSV file found in equivalent SFF folder : `%s`\n", sffFolder))
+        elseif length(glob("*.csv", sffFolderPath)) == 0
+            error(@printf("\nCSV file not found in equivalent SFF folder : `%s`\n", sffFolder))
+        end
+
+        csvPathSFF = glob("*.csv", sffFolderPath)[1]
+        sffCSV = CSV.File(csvPathSFF; select=["image", "z_cam"])
+        # image = CSV.File(csvPathSFF; select=[""]
+    end
+
 
     # Get all Z positions and remove duplicates
     # NOTE: Sort to make sure they're stored in ascending order
@@ -98,39 +160,49 @@ function sff_rti(baseFolder, method="fvg", kernel="sobel", outputFolder=nothing,
         # Average focus map
         focusMap = FilterImageAverage(focusMap)
 
-        # Centering image values attempts to push dynamic range so that all values are positive and will no longer give errors when computing logs during Gaussian interpolation
-        # focusMap = abs.(focusMap)
-        # focusMap = imageCenterValues(focusMap)
-        # NOTE: Let's just try to offset the image values by a constant amount so that they're all remaining on the same rough scale
-        # focusMap = focusMap .+ 500
-        # focusMap = focusMap .+ 255
+        # Offsetting image values attempts to push dynamic range so that all values are positive and will no longer give errors when computing logs during Gaussian interpolation
 
-        if minimum(focusMap) < offsetAmount
-            global offsetAmount = minimum(focusMap)
+        # Track maximum required offset value so that we can keep all images to be compared relative to one another. 
+        global offsetAmount = minimum([minimum(focusMap), offsetAmount])
+
+        if compute_snr == true
+
+            for sffRow in sffCSV
+
+                if sffRow.z_cam == zPosList[idx]
+
+                    sffImg = Gray.(load(sffFolderPath*"/Renders/"*sffRow.image*".png"))
+
+                    sffFocusMap = FilterImageCombined(sffImg, kernel)
+
+                    # Determine what value to use for image normalization
+                    snrNormalizationCoefficient = maximum([maximum(focusMap), maximum(sffFocusMap)])
+
+                    # NOTE: Am I doing the right thing in normalizing these to be on then same scale???? Should I just be normalizing or perhaps not touching them at all?
+                    snrDict[zPosList[idx]] = 10*log10(mean(focusMap./snrNormalizationCoefficient)/rmse(sffFocusMap./snrNormalizationCoefficient, focusMap./snrNormalizationCoefficient))
+
+                    psnrDict[zPosList[idx]] = 10*log10(1/mse(sffFocusMap./snrNormalizationCoefficient, focusMap./snrNormalizationCoefficient))
+
+                end
+            end
+
         end
 
-        # println(minimum(focusMap))
 
-        # if write_maps == true
-
-        #     outputFolderConcatenated = string(outputFolder, "/FOCUS MAPS/", basename(baseFolder), " ", uppercase(method), " ", uppercase(kernel), "/")
-
-        #     # Make sure all nested folders exist and create them if not
-        #     ispath(outputFolder*"/FOCUS MAPS/") || mkpath(outputFolder*"/FOCUS MAPS/")
-        #     ispath(outputFolderConcatenated) || mkpath(outputFolderConcatenated)
-
-        #     save(outputFolderConcatenated*string(idx)*".png", imageNormalize(focusMap))
-        # end
 
         # Store focus map in list and iterate progress bar
         push!(fvgList, focusMap)
         ProgressMeter.next!(prog; showvalues= [(:"Current Distance", zPosList[idx]), (:"Offset Amount", offsetAmount)])
-    end
+    end 
 
     # Add offset amount to all focus maps
     # for focusMap in fvgList
+
+    fvgList = [fvgList[idx] = fvgList[idx].+abs(offsetAmount) for idx in eachindex(fvgList)]
+    focusMapNormCoeff = maximum(maximum.(fvgList))
+
     for idx in eachindex(fvgList)
-        fvgList[idx] = fvgList[idx] .+ abs(offsetAmount)
+        # fvgList[idx] = fvgList[idx] .+ abs(offsetAmount)
 
         if write_maps == true
 
@@ -140,54 +212,18 @@ function sff_rti(baseFolder, method="fvg", kernel="sobel", outputFolder=nothing,
             ispath(outputFolder*"/FOCUS MAPS/") || mkpath(outputFolder*"/FOCUS MAPS/")
             ispath(outputFolderConcatenated) || mkpath(outputFolderConcatenated)
 
-            save(outputFolderConcatenated*string(idx)*".png", imageNormalize(fvgList[idx]))
+            save(outputFolderConcatenated*lpad(string(idx), length(string(length(fvgList))), "0")*".png", fvgList[idx]./focusMapNormCoeff)
         end
 
     end
-    # [focusMap .+ offsetAmount for focusMap in fvgList]
 
     println("Computing depth map...")
     Z, R = sff(fvgList, zPosList, 2, true)
 
-    # TEMP NORMALIZE 0-1
-    # Z = (Z.-minimum(Z))/(maximum(Z)-minimum(Z))
+    if compute_snr == false
+        snrDict = Dict(NaN=>NaN)
+        psnrDict = Dict(NaN=>NaN)
+    end
 
-    # Compute normals from depth map
-    # println("Computing surface normals from depth map...")
-    # normals = Depth2Normal(Z)
-    # normals = Depth2Normal(complement.(Z))
-
-    # Carve depth map with R
-    # ZC = copy(Z)
-    # ZC[R.<20] .= minimum(zPosList)
-
-    # RC = copy(R)
-    # RC[R.<20] .= 0
-    # RC = Gray.(RC)
-
-    ### VISUALIZATION & IO
-    # normalsX = (normals[:,:,1])
-    # normalsY = (normals[:,:,2])
-    # normalsZ = (normals[:,:,3])
-
-    # normalsX = shiftNormalsRange(normals[:,:,1])
-    # normalsY = shiftNormalsRange(normals[:,:,2])
-    # normalsZ = shiftNormalsRange(normals[:,:,3])
-
-    # normalsColor = colorview(RGB, normalsX, normalsY, normalsZ)
-
-    # If given output folder, write out images
-    # if outputFolder !== nothing
-    #     folderName = basename(baseFolder)
-
-    #     outputFolderConcatenated = outputFolder*"/"*uppercase(method)*" "*uppercase(kernel)*"/"
-    #     ispath(outputFolderConcatenated) || mkpath(outputFolderConcatenated)
-
-    #     save(outputFolderConcatenated*"/Z_"*folderName*"_"*method*"_"*kernel*".png", imageNormalize(Z))
-    #     save(outputFolderConcatenated*"/R_"*folderName*"_"*method*"_"*kernel*".png", imageNormalize(R))
-    #     save(outputFolderConcatenated*"/RC_"*folderName*"_"*method*"_"*kernel*".png", imageNormalize(RC))
-    #     save(outputFolderConcatenated*"/normals_"*folderName*"_"*method*"_"*kernel*".png", normalsColor)
-    # end
-
-    return Z, R
+    return Z, R, mean(values(snrDict)), mean(values(psnrDict))
 end
