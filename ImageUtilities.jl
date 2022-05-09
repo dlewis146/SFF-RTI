@@ -87,7 +87,22 @@ function FilterImageCombined(img, filter="sobel", ksize=(3,3))
 
 end
 
-function FilterImageSeparate(img, filter="sobel")
+function ImageHistogram(img, bins=256)
+
+    img = img./maximum(img)
+
+    hist = zeros(bins)
+
+    for value in img
+        valueRounded = Int(round(value*(bins-1))) + 1
+        hist[valueRounded] = hist[valueRounded] + 1
+    end
+
+    return hist
+
+end
+
+function FilterImageSeparate(img, filter="sobel", ksize=(3,3))
     """
     This function is written with the purpose of being a "handler" function
     for filtering images. As it seems the calls for filtering images with

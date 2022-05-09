@@ -1,13 +1,28 @@
 struct LightAngle
     """
-    Structure for containing X,Y,Z coordinates of lamps as well as converted θ, ϕ angles.
+    Structure for containing X,Y,Z coordinates of lamps.
     """
     x::Float64
     y::Float64
     z::Float64
-    theta::Float64
-    phi::Float64
+end
 
+function(lp::LightAngle)()
+    """
+    Functor for usage with LightAngle struct. Computes theta and phi angles in spherical coordinate system.
+    Example)
+        lp = LightAngle(5,5,5)
+        lp()
+
+        OR 
+
+        lp = LightAngle(5,5,5)()
+
+    """
+    sph = SphericalFromCartesian()([lp.x,lp.y,lp.z])
+    theta = sph.θ
+    phi = sph.ϕ
+    return [theta,phi]
 end
 
 
