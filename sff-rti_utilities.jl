@@ -1,7 +1,9 @@
 struct FileSet
     Z::Array{Float64}
     R::Array{Float64}
-    folderName::String
+    numRTI::Int
+    numSFF::Int
+    # folderName::String
     method::String
     kernel::String
 end
@@ -47,7 +49,8 @@ function WriteMaps(structList, outputFolder, ZMax=nothing, RMax=nothing)
     end
 
     for s in structList
-        # outputFolder = outputBase*s.folderName
+
+        folderName = "RTI_"*string(s.numRTI)*"_SFF_"*string(s.numSFF)
 
         normals = Depth2Normal(s.Z)
 
@@ -59,10 +62,10 @@ function WriteMaps(structList, outputFolder, ZMax=nothing, RMax=nothing)
         outputFolderConcatenated = outputFolder*"/"*uppercase(s.method)*" "*uppercase(s.kernel)*"/"
         ispath(outputFolderConcatenated) || mkpath(outputFolderConcatenated)
 
-        save(outputFolderConcatenated*"/Z_"*s.folderName*"_"*s.method*"_"*s.kernel*".png", s.Z/ZMax)
-        save(outputFolderConcatenated*"/Znorm_"*s.folderName*"_"*s.method*"_"*s.kernel*".png", imageDisp01(s.Z))
-        save(outputFolderConcatenated*"/R_"*s.folderName*"_"*s.method*"_"*s.kernel*".png", s.R/RMax)
-        save(outputFolderConcatenated*"/normals_"*s.folderName*"_"*s.method*"_"*s.kernel*".png", normalsColor)
+        save(outputFolderConcatenated*"/Z_"*folderName*"_"*s.method*"_"*s.kernel*".png", s.Z/ZMax)
+        save(outputFolderConcatenated*"/Znorm_"*folderName*"_"*s.method*"_"*s.kernel*".png", imageDisp01(s.Z))
+        save(outputFolderConcatenated*"/R_"*folderName*"_"*s.method*"_"*s.kernel*".png", s.R/RMax)
+        save(outputFolderConcatenated*"/normals_"*folderName*"_"*s.method*"_"*s.kernel*".png", normalsColor)
     end
 end
 
@@ -145,11 +148,35 @@ function ParseFolderName(folderName)
 
     for idx in eachindex(s)
         if uppercase(s[idx]) == "RTI"
-            numRTI = s[idx+1]
+            numRTI = parse(Int, s[idx+1])
         elseif uppercase(s[idx]) == "SFF"
-            numSFF = s[idx+1]
+            numSFF = parse(Int, s[idx+1])
         end
     end
     return numRTI, numSFF
 end
 
+function CompositeFromDepthMap(fileList, depthMap)
+    """
+    Takes in a list of image filepaths (so that RGB may be read) as well as a depth map whose pixel values correspond to the indices
+    of the ordered list of images. This is to say that each pixel of the given depth map should have a value corresponding to 
+    which image in the given list is considered to be focused for that point. 
+    """
+
+    imageList = ReadImageList(fileList, grayscale=false)
+
+    outputImage = zeros(size(imageList[1],1), size(imageList[1],2), 3)
+
+    for r in range(1, stop=size(depthMap, 1))
+        for c in range(1, stop=size(depthMap, 2))
+
+            z = Integer(round(depthMap[r,c]))
+            # z = depthMap[r,c]
+
+            outputImage[r,c,:] = imageList[z][r,c,:]
+
+        end
+    end
+
+    return outputImage
+end

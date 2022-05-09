@@ -48,7 +48,7 @@ function FindSFFEquivalent(baseFolder)
     return folderName
 end
 
-function sff_rti(baseFolder, method="fvg", kernel="sobel", outputFolder=nothing, write_maps=false, compute_snr=false)
+function sff_rti(baseFolder, method="fvg", kernel="sobel"; ksize::Tuple{Int,Int}=(3,3), outputFolder=nothing, write_maps=false, compute_snr=false)
 
     # Make sure that `method` and `kernel` are lowercase for parsing compatibility
     method = lowercase(method)
@@ -68,6 +68,10 @@ function sff_rti(baseFolder, method="fvg", kernel="sobel", outputFolder=nothing,
     elseif length(glob("*.csv", baseFolder)) == 0
         error("\nCSV file not found in given folder\n")
     end
+
+    # if numberLights !== nothing
+    #     @printf("Using %i light positions\n", numberLights)
+    # end
 
     csvPath = glob("*.csv", baseFolder)[1]
     folderPath = baseFolder * "/Renders/"
@@ -102,9 +106,11 @@ function sff_rti(baseFolder, method="fvg", kernel="sobel", outputFolder=nothing,
     zPosList = sort(unique([row.z_cam for row in CSV.File(csvPath; select=["z_cam"])]), rev=true)
     # zPosList = sort(unique([row.z_cam for row in CSV.File(csvPath; select=["z_cam"])]))
     println("NOTE: Reversing zPosList")
+    println("NOTE: Adding constant of 10 to x_lamp,y_lamp,z_lamp in attempt to keep all values about 0")
 
     fvgList = []
     global offsetAmount = 0
+    global focusMapNormCoeff = 0
 
     # Not a NECESSARY addition, but it just makes it a bit clearer visually which method is currently being run
     if method == "fvg"
@@ -120,34 +126,38 @@ function sff_rti(baseFolder, method="fvg", kernel="sobel", outputFolder=nothing,
         angleList = []
         fileList = []
 
+        # Use CSV to generate filelist and angle objects. 
         for row in rowList
 
             # Conditional to make sure we're only dealing with one Z position at a time
             if row.z_cam != zPosList[idx]
                 continue
-            end
-
+            else
             # Construct and store filename based off of CSV entries
             push!(fileList, folderPath*row.image*".png")
-
-            # Compute spherical coordinates from Cartesian
-            sph = SphericalFromCartesian()([row.x_lamp,row.y_lamp,row.z_lamp])
-
-            # Place all coordinates (including spherical coordinate system angle) into LightAngle object list
-            push!(angleList, LightAngle(row.x_lamp, row.y_lamp, row.z_lamp, sph.θ, sph.ϕ))
-
+                
+            # Place all coordinates into LightAngle object list
+            push!(angleList, LightAngle(row.x_lamp+10, row.y_lamp+10, row.z_lamp+10))
+            end
         end
+
+        # # If numberLights is specified, evenly select files/light positions
+        # if numberLights !== nothing
+        #     idxList = [Int(floor(i)) for i in range(1, stop=size(angleList,1), length=numberLights)]
+        #     angleList = angleList[idxList]
+        #     fileList = fileList[idxList]
+        # end
 
         # Compute desired focus map 
         focusMap = nothing
         if method == "fvg"
             # Compute FVG
-            focusMap = ComputeFullVectorGradient(fileList, angleList, kernel)
+            focusMap = ComputeFullVectorGradient(fileList, angleList, kernel, ksize)
         else
             gradientList = []
             for file in fileList
                 img = Gray.(load(file))
-                push!(gradientList, FilterImageCombined(img, kernel))
+                push!(gradientList, FilterImageCombined(img, kernel, ksize))
             end
             
             if method == "mean"
@@ -173,7 +183,7 @@ function sff_rti(baseFolder, method="fvg", kernel="sobel", outputFolder=nothing,
 
                     sffImg = Gray.(load(sffFolderPath*"/Renders/"*sffRow.image*".png"))
 
-                    sffFocusMap = FilterImageCombined(sffImg, kernel)
+                    sffFocusMap = FilterImageCombined(sffImg, kernel, ksize)
 
                     # Determine what value to use for image normalization
                     snrNormalizationCoefficient = maximum([maximum(focusMap), maximum(sffFocusMap)])

@@ -35,18 +35,30 @@ for f in innerFolderList
         for kernel in kernelList
 
             # Run SFF-RTI method
-            Z, R, snrMean, psnrMean = sff_rti(base*f, method, kernel, outputFolder, write_maps_flag, compute_snr_flag)
+            println()
+            Z, R, snrMean, psnrMean = sff_rti(base*f, method, kernel; ksize=(5,5), outputFolder=outputFolder, write_maps=write_maps_flag, compute_snr=compute_snr_flag)
+
+            numRTI, numSFF = ParseFolderName(f)
+
+            # if numberLights !== nothing
+            #     numRTI = numberLights
+            # end
 
             if outputFolder !== nothing
-                push!(outputStructList, FileSet(Z,R,f,method,kernel))
+                push!(outputStructList, FileSet(Z,R,numRTI,numSFF,method,kernel))
             end
 
             # # Normalize computed depth map so that it's placed from 0-1
             Z_normalized = imageDisp01(Z)
 
-            # Compute rmse and inverse RMSE then store all statistical measures in appropriate dictionaries
-            rmseList[f,method,kernel]  = rmse(GT, Z_normalized)
-            irmseList[f,method,kernel] = 1-rmseList[f,method,kernel]
+            if compute_rmse_flag
+                # Compute rmse and inverse RMSE then store all statistical measures in appropriate dictionaries
+                rmseList[f,method,kernel]  = rmse(GT, Z_normalized)
+                irmseList[f,method,kernel] = 1-rmseList[f,method,kernel]
+            elseif !compute_rmse_flag
+                rmseList[f,method,kernel] = NaN
+                irmseList[f,method,kernel] = NaN
+            end
 
             # snrDict[f,method,kernel] = 10*log10(mean(Z_normalized)/rmse(GT, Z_normalized))
             # psnrDict[f,method,kernel] = 10*log10(1/mse(GT, Z_normalized))

@@ -1,6 +1,6 @@
 using Statistics
 
-function ReadImageList(file_list, grayscale=true)
+function ReadImageList(file_list; grayscale=true)
     """
     Takes in a list of image filepaths and returns a list of image Arrays
     """
@@ -16,17 +16,17 @@ function ReadImageList(file_list, grayscale=true)
             error("ReadImageList was given a non-recognized input file: ", f)
         end
 
-        if grayscale
+        if grayscale == true
             push!(img_list, Gray.(load(f)))
-        elseif not grayscale
-            push!(img_list, load(f))
+        elseif grayscale == false
+            push!(img_list, RGB2Float64(load(f)))
         end
     end
    
     return img_list
 end
 
-function FilterImageCombined(img, filter="sobel")
+function FilterImageCombined(img, filter="sobel", ksize=(3,3))
     """
     This function is written with the purpose of being a "handler" function
     for filtering images. As it seems the calls for filtering images with
@@ -39,16 +39,47 @@ function FilterImageCombined(img, filter="sobel")
 
     if filter == "teng" || filter == "sobel"
 
-        Sx = [1 2 1 ; 0 0 0 ; -1 -2 -1]
-        Sy = [-1 0 1 ; -2 0 2 ; -1 0 1]
+        # Variable size Sobel formula taken from https://newbedev.com/sobel-filter-kernel-of-large-size
+
+        # Error handling
+        if !isodd(ksize[1]) || !isodd(ksize[2]); error("ksize for Sobel operator must consist of odd numbers only.") end
+
+        if ksize[1] != ksize[2]; error("Given ksize dimensions must be equal for Sobel operator.") end
+            
+
+        Sx = zeros(ksize)
+        Sy = zeros(ksize)
+
+        # Pre compute the half size of each dimension so that the indices can be offset when placing values into the output arrays
+        yOffset = Int(floor(ksize[1]/2))
+        xOffset = Int(floor(ksize[2]/2))
+
+        for y in range(-yOffset, stop=yOffset)
+            for x in range(-xOffset, stop=xOffset)
+
+                # Yes these are written right. Julia's indexing is being weird, but this gives the expected directions for Sx and Sy
+                yVal = x / (x*x + y*y)
+                xVal = y / (x*x + y*y)
+
+                # Compute these indices before actual assignment simply to improve readability of following lines
+                xIdx = x+xOffset+1
+                yIdx = y+yOffset+1
+
+                # Center point in the matrix is NaN because it's 0 / (0*0 + 0*0)
+                if isnan(xVal); Sx[xIdx,yIdx] = 0.0 else Sx[xIdx,yIdx] = xVal end
+                if isnan(yVal); Sy[xIdx,yIdx] = 0.0 else Sy[xIdx,yIdx] = yVal end
+
+            end    
+        end
+
         imgX = imfilter(img, Sx, "replicate")
         imgY = imfilter(img, Sy, "replicate")
-
         imgOut = sqrt.(imgX.^2 + imgY.^2)
 
     elseif filter == "sml"
 
-        imgOut = SumModifiedLaplacian(img)
+        # NOTE: I allow 2 factors to be given for the kernel sizes in general, but SML will only take the first value
+        imgOut = SumModifiedLaplacian(img, Int(ksize[1]))
 
     end
 
@@ -69,15 +100,46 @@ function FilterImageSeparate(img, filter="sobel")
     imgY = zero(img)
 
     if filter == "sobel"
+        # Variable size Sobel formula taken from https://newbedev.com/sobel-filter-kernel-of-large-size
 
-        Sx = [1 2 1 ; 0 0 0 ; -1 -2 -1]
-        Sy = [-1 0 1 ; -2 0 2 ; -1 0 1]
+        # Error handling
+        if !isodd(ksize[1]) || !isodd(ksize[2]); error("ksize for Sobel operator must consist of odd numbers only.") end
+
+        if ksize[1] != ksize[2]; error("Given ksize dimensions must be equal for Sobel operator.") end
+            
+
+        Sx = zeros(ksize)
+        Sy = zeros(ksize)
+
+        # Pre compute the half size of each dimension so that the indices can be offset when placing values into the output arrays
+        yOffset = Int(floor(ksize[1]/2))
+        xOffset = Int(floor(ksize[2]/2))
+
+        for y in range(-yOffset, stop=yOffset)
+            for x in range(-xOffset, stop=xOffset)
+
+                # Yes these are written right. Julia's indexing is being weird, but this gives the expected directions for Sx and Sy
+                yVal = x / (x*x + y*y)
+                xVal = y / (x*x + y*y)
+
+                # Compute these indices before actual assignment simply to improve readability of following lines
+                xIdx = x+xOffset+1
+                yIdx = y+yOffset+1
+
+                # Center point in the matrix is NaN because it's 0 / (0*0 + 0*0)
+                if isnan(xVal); Sx[xIdx,yIdx] = 0.0 else Sx[xIdx,yIdx] = xVal end
+                if isnan(yVal); Sy[xIdx,yIdx] = 0.0 else Sy[xIdx,yIdx] = yVal end
+
+            end    
+        end
+
         imgX = imfilter(img, Sx, "replicate")
         imgY = imfilter(img, Sy, "replicate")
 
     elseif filter == "sml"
 
-        imgX, imgY = SumModifiedLaplacian2D(img)
+        # NOTE: I allow 2 factors to be given for the kernel sizes in general, but SML will only take the first value
+        imgX, imgY = SumModifiedLaplacian2D(img, Int(ksize[1]))
 
     end
 
@@ -137,9 +199,10 @@ function ComputeSTDImage(imageList)
 
 end
 
-function SumModifiedLaplacian(img, window_size::Int64 = 5, step_size::Int64 = 1, threshold = 7/255)
+function SumModifiedLaplacian(img, window_size::Int = 5, step_size::Int = 1, threshold = 7/255)
 
-    window_size_half::Int64 = Int(floor(window_size/2))
+    window_size_half::Int = Int(floor(window_size/2))
+    # dim_spacer::Int = window_size_half
     dim_spacer::Int64 = window_size_half + step_size
 
     # Pad input image with replicated edges
@@ -150,8 +213,7 @@ function SumModifiedLaplacian(img, window_size::Int64 = 5, step_size::Int64 = 1,
     for c in range(1, stop=size(img,1))
         for r in range(1, stop=size(img,2))
 
-            window::Matrix{Float64} = imagePadded[ c-dim_spacer:c+dim_spacer , r-dim_spacer:r+dim_spacer ]
-
+            window::Matrix{Float64} = @views imagePadded[ c-dim_spacer:c+dim_spacer , r-dim_spacer:r+dim_spacer ]
 
             for cc in range(step_size+1, stop=size(window, 1)-step_size)
                 for rr in range(step_size+1, stop=size(window, 2)-step_size)
@@ -159,7 +221,7 @@ function SumModifiedLaplacian(img, window_size::Int64 = 5, step_size::Int64 = 1,
                     sml_val = abs(2 * window[cc,rr] - window[cc-step_size,rr] - window[cc+step_size,rr]) + abs(2 * window[cc,rr] - window[cc,rr-step_size] - window[cc,rr+step_size])
 
                     if sml_val >= threshold
-                        imageOut[c-dim_spacer, r-dim_spacer] += sml_val
+                        imageOut[c, r] += sml_val
                     end
                 end
             end
@@ -170,15 +232,16 @@ function SumModifiedLaplacian(img, window_size::Int64 = 5, step_size::Int64 = 1,
 
 end
 
-function SumModifiedLaplacian2D(img)
+function SumModifiedLaplacian2D(img, window_size::Int = 5, step_size::Int = 1, threshold::Float64 = (7/2)/255)
 
     # NOTE: Has hard coded parameters!!!
-    window_size::Int = 5
-    step_size::Int = 1
-    threshold::Float64 = (7/2)/255
+    # window_size::Int = 5
+    # step_size::Int = 1
+    # threshold::Float64 = (7/2)/255
     # threshold::Float64 = 7/255
 
     window_size_half::Int = Int(floor(window_size/2))
+    # dim_spacer::Int = window_size_half
     dim_spacer::Int = window_size_half + step_size
 
     # Pad input image with replicated edges

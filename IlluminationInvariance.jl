@@ -11,7 +11,7 @@ struct LightAngle
 end
 
 
-function ComputeFullVectorGradient(file_list, angle_list, kernel="sobel")
+function ComputeFullVectorGradient(file_list, angle_list, kernel="sobel", ksize::Tuple{Int,Int}=(3,3))
     """
     Takes in a list of image filepaths as well as a list of LightAngle 
     objects (correlated with images by stored order). Returns a single
@@ -60,7 +60,7 @@ function ComputeFullVectorGradient(file_list, angle_list, kernel="sobel")
                 # Compute focus maps for image in `file_list` at `j`
                 img = Gray.(load(file_list[j]))
 
-                imgX, imgY = FilterImageSeparate(img, kernel)
+                imgX, imgY = FilterImageSeparate(img, kernel, ksize)
 
                 # Flatten images with vec() and then copy to appropriate
                 # array rows
