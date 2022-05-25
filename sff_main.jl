@@ -5,7 +5,7 @@ include("./ImageUtilities.jl")
 
 global ACCEPTED_KERNELS = ["sml", "sobel"]
 
-function sff_main(baseFolder, kernel="sml", outputFolder=nothing, write_maps=false)
+function sff_main(baseFolder, kernel="sml"; ksize=(3,3), outputFolder=nothing, write_maps=false)
        
     # Make sure that given kernel is compatible with methods
     if !(kernel in ACCEPTED_KERNELS)
@@ -21,7 +21,6 @@ function sff_main(baseFolder, kernel="sml", outputFolder=nothing, write_maps=fal
 
     # Get all interesting files
     folderPath = baseFolder*"/Renders/"
-    # fileList = glob("*.png", folderPath)
 
     # NOTE: Using this instead of just globbing all files so that they're read in and stored in the proper order. This doesn't happen by default due to a lack of zero-padding of frame numbers in file names
     rowList = CSV.File(csvPath; select=["image", "z_cam"])
@@ -38,7 +37,7 @@ function sff_main(baseFolder, kernel="sml", outputFolder=nothing, write_maps=fal
         focusMap = FilterImageCombined(img, kernel)
 
         # Average filter focus map
-        focusMap = FilterImageAverage(focusMap, (3,3))
+        focusMap = FilterImageAverage(focusMap, ksize)
 
         if write_maps == true
             outputFolderConcatenated = string(outputFolder, "/FOCUS MAPS/SFF_", basename(baseFolder), " ", uppercase(kernel), "/")
@@ -47,7 +46,7 @@ function sff_main(baseFolder, kernel="sml", outputFolder=nothing, write_maps=fal
             ispath(outputFolder*"/FOCUS MAPS/") || mkpath(outputFolder*"/FOCUS MAPS/")
             ispath(outputFolderConcatenated) || mkpath(outputFolderConcatenated)
 
-            save(outputFolderConcatenated*string(idx)*".png", imageNormalize(focusMap))
+            save(outputFolderConcatenated*lpad(string(idx),length(string(length(fileList))), "0")*".png", imageNormalize(focusMap))
         end
 
         push!(imageList, focusMap)
@@ -56,66 +55,34 @@ function sff_main(baseFolder, kernel="sml", outputFolder=nothing, write_maps=fal
     # Read z_cam out of CSV and then extract from array of CSV.Row objects into a vector of Float64's
     focusList = CSV.File(csvPath; select=["z_cam"])
 
-    focusList = sort([row.z_cam for row in focusList])
+    # NOTE: Reversing focusList for consistency with SFF-RTI and GT where point closest to camera is lowest pixel value and further is highest value
+    focusList = sort([row.z_cam for row in focusList], rev=true)
 
-    Z, R = sff(imageList, focusList, 2, true)
+    Z = sff(imageList, focusList; sampleStep=2, median=true)
 
-    # Normalize Z to between 0 and 1
-    # Z_norm = (Z.-minimum(Z))/(maximum(Z)-minimum(Z))
-    # Z_norm = imageCenterValues(Z_norm)
-
-    # Carve depth map with R
-    # R<20 is unreliable
-    # ZC = Z
-    # ZC[R.<20] .= minimum(focusList)
-
-    # RC = ones(size(R))
-    # RC[R.<20] .= 0
-    # RC = Gray.(RC)
-
-    # Compute normals from depth map
-    # normals = Depth2Normal(complement.(Z_norm))
-
-    ### STATISTICS
-
-    # normalsX = shiftNormalsRange(normals[:,:,1])
-    # normalsY = shiftNormalsRange(normals[:,:,2])
-    # normalsZ = shiftNormalsRange(normals[:,:,3])
-    # normalsColor = colorview(RGB, normalsX, normalsY, normalsZ)
-
-
-    # if outputFolder !== nothing
-    #     folderName = basename(baseFolder)
-
-    #     outputFolderConcatenated = outputFolder*"/SFF "*uppercase(kernel)*"/"
-    #     ispath(outputFolderConcatenated) || mkpath(outputFolderConcatenated)
-
-    #     save(outputFolderConcatenated*"/Z_"*folderName*"_SFF_"*kernel*".png", complement.(imageDisp01(Z)))
-    #     save(outputFolderConcatenated*"/R_"*folderName*"_SFF_"*kernel*".png", imageNormalize(R))
-    #     save(outputFolderConcatenated*"/RC_"*folderName*"_SFF_"*kernel*".png", imageNormalize(RC))
-    #     save(outputFolderConcatenated*"/normals_"*folderName*"_SFF_"*kernel*".png", normalsColor)
-    # end
-
-    return Z, R
-    # return Z, R, RC, normalsColor
-
+    return Z
 end
 
 
-base = "F:/Research/Generated Data/Blender/Statue du parc d'Austerlitz/SFF/Restrained Z/"
+base = "J:/Research/Generated Data/Blender/Statue du parc d'Austerlitz/SFF/"
+# base = "J:/Research/Generated Data/Blender/Statue du parc d'Austerlitz/SFF/Restrained Z/"
 
-innerFolderList = ["5", "20", "100"]
+innerFolderList = ["5", "100"]
+# kernelList = ["sml"]
 kernelList = ["sobel", "sml"]
 
-outputFolder = "F:/Image Out/Restrained Z/"
+outputFolder = "J:/Image Out/Statue (5,5)/"
 
-# Empty dictionaries to gather RMSE and inverse RMSE 
-rmseList = Dict()
-irmseList = Dict()
+# Create empty dictionaries to gather MS-SIM, MS-SSIM (Just structure) and PSNR 
+msssimDict = Dict()
+structureDict = Dict()
+psnrDict = Dict()
+
+compute_ssim = true
 
 # Read in ground truth depth map for comparison
 # NOTE: Using RTI collection due to original GT collection having a different camera setup
-GT = Gray2Float64(Gray.(load("F:/Research/Generated Data/Blender/Statue du parc d'Austerlitz/RTI/Black Background - FullScale/Depth/Image0001.png")))
+GT = Gray2Float64(Gray.(load("J:/Research/Generated Data/Blender/Statue du parc d'Austerlitz/RTI/Black Background - FullScale/Depth/Image0001.png")))
 
 outputStructList = []
 
@@ -125,27 +92,41 @@ for f in innerFolderList
         println("Running ", kernel, " for ", f)
 
         # Run SFF method
-        Z,R = sff_main(base*f, kernel, nothing, false)
+        Z = sff_main(base*f, kernel; ksize=(5,5), outputFolder=outputFolder, write_maps=true)
 
         if outputFolder !== nothing
-            push!(outputStructList, FileSet(Z,R,f,"SFF",kernel))
+            push!(outputStructList, FileSet(Z,0,parse(Int,f),"SFF",kernel))
         end
 
         # Normalize computed depth map so that it's placed from 0-1
+        # Z_normalized = imageDisp01(Z)
         Z_normalized = complement.(imageDisp01(Z))
 
-        rmseList[f,kernel] = rmse(GT, Z_normalized)
-        irmseList[f,kernel] = 1-rmseList[f,kernel]
+        if compute_ssim
+            # Compute SSIM and MS-SSIM then store all statistical measures in appropriate dictionaries
+            # TEMP: Trying to compute MS-SSIM and MS-SSIM with just structural comparison taken into account
+            """
+            Here, the first parameter is the kernel used to weight the neighbourhood of each pixel while calculating the SSIM locally, and defaults to KernelFactors.gaussian(1.5, 11). The second parameter is the set of weights (α, β, γ) given to the lunimance (L), contrast (C) and structure (S) terms while calculating the SSIM, and defaults to (1.0, 1.0, 1.0). Recall that SSIM is defined as Lᵅ × Cᵝ × Sᵞ.
+            Source: https://juliaimages.org/stable/examples/image_quality_and_benchmarks/structural_similarity_index/
+            """
+
+            iqi = MSSSIM(KernelFactors.gaussian(1.5,11), (0.0,0.0,1.0))
+            structureDict[f,method,kernel] = assess(iqi, GT, Z_normalized)
+
+            # ssim[f,method,kernel]  = assess_ssim(GT, Z_normalized)
+            msssimDict[f,method,kernel]  = assess_msssim(GT, Z_normalized)
+        elseif !compute_ssim
+            structureDict[f,method,kernel] = NaN
+            msssimDict[f,method,kernel] = NaN
+        end
+        psnrDict[f,"sff",kernel] = NaN
     end
 end
 
-ZMax, RMax = FindFileSetMax(outputStructList)
-# println("NOTE: Using SFF-RTI ZMax and RMax normalization coefficients")
-# ZMax = 8.5
-# RMax = 292.7648
+ZMax = FindFileSetMax(outputStructList)
 
 if outputFolder !== nothing
-    WriteMaps(outputStructList, outputFolder)
+    WriteMaps(outputStructList, outputFolder, nothing)
 end
 
-WriteCSV(outputFolder*"/Ground truth comparison results SFF.csv", innerFolderList, ["sff"], kernelList, rmseList, irmseList, ZMax, RMax)
+WriteCSV(outputFolder*"/Ground truth comparison results SFF.csv", innerFolderList, ["sff"], kernelList, structureDict, msssimDict, ZMax, psnrDict)

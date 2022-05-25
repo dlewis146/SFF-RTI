@@ -1,55 +1,40 @@
 struct FileSet
     Z::Array{Float64}
-    R::Array{Float64}
     numRTI::Int
     numSFF::Int
-    # folderName::String
     method::String
     kernel::String
 end
 
 function FindFileSetMax(structList)
     """
-    Takes in list of FileSet structs and returns global maximums for Z and R in that order. 
+    Takes in list of FileSet structs and returns global maximum for Z. 
     Used for determining global normalization value.
     """
-
-    zMaxGlobal = 0
-    rMaxGlobal = 0
+    zMaxGlobal = 0.0
 
     for s in structList
-        
         zMaxLocal = maximum(s.Z)
-        rMaxLocal = maximum(s.R)
-
         if zMaxLocal > zMaxGlobal
             zMaxGlobal = zMaxLocal
         end
-
-        if rMaxLocal > rMaxGlobal
-            rMaxGlobal = rMaxLocal
-        end
     end
 
-    return zMaxGlobal, rMaxGlobal
+    return zMaxGlobal
 end
 
-function WriteMaps(structList, outputFolder, ZMax=nothing, RMax=nothing)
+function WriteMaps(structList, outputFolder, ZMax=nothing)
     """
     Takes in list of FileSet structs and an output folder path. Finds global normalization values for 
-    Z and R maps in structList and then writes them out (along with computed surface normals) in appropriate folders inside of outputBase.
+    depth maps (Z) in structList and then writes them out (along with computed surface normals) in appropriate folders inside of outputBase.
     """
         
-    # Get new ZMax and/or RMax if not given
-    if ZMax === nothing || RMax === nothing
-        ZMaxNew, RMaxNew = FindFileSetMax(outputStructList)
-
-        if ZMax === nothing; ZMax = ZMaxNew end
-        if RMax === nothing; RMax = RMaxNew end
+    # Get new ZMax if not given
+    if ZMax === nothing
+        ZMax = FindFileSetMax(structList)
     end
 
     for s in structList
-
         folderName = "RTI_"*string(s.numRTI)*"_SFF_"*string(s.numSFF)
 
         normals = Depth2Normal(s.Z)
@@ -62,21 +47,20 @@ function WriteMaps(structList, outputFolder, ZMax=nothing, RMax=nothing)
         outputFolderConcatenated = outputFolder*"/"*uppercase(s.method)*" "*uppercase(s.kernel)*"/"
         ispath(outputFolderConcatenated) || mkpath(outputFolderConcatenated)
 
-        save(outputFolderConcatenated*"/Z_"*folderName*"_"*s.method*"_"*s.kernel*".png", s.Z/ZMax)
-        save(outputFolderConcatenated*"/Znorm_"*folderName*"_"*s.method*"_"*s.kernel*".png", imageDisp01(s.Z))
-        save(outputFolderConcatenated*"/R_"*folderName*"_"*s.method*"_"*s.kernel*".png", s.R/RMax)
+        save(outputFolderConcatenated*"/Z_"*folderName*"_"*s.method*"_"*s.kernel*".tif", s.Z/ZMax)
+        save(outputFolderConcatenated*"/Znorm_"*folderName*"_"*s.method*"_"*s.kernel*".tif", imageDisp01(s.Z))
         save(outputFolderConcatenated*"/normals_"*folderName*"_"*s.method*"_"*s.kernel*".png", normalsColor)
     end
 end
 
-function WriteCSV(outputPath::String, folderList::Array{String}, methodList::Array{String}, kernelList::Array{String}, rmseList::Dict, irmseList::Dict, ZMax::Float64, RMax::Float64, snrDict::Dict, psnrDict::Dict)
+function WriteCSV(outputPath::String, folderList::Array{String}, methodList::Array{String}, kernelList::Array{String}, ssimDict::Dict, msssimDict::Dict, ZMax::Float64, psnrDict::Dict)
 
     # Write out comparison results
     println("Writing results to text file...")
     open(outputPath, "w") do io
 
         # Write header
-        write(io, "numRTI,numSFF,method,kernel,rmse,inverse rmse,average snr,average psnr,Z normalization coefficient,R normalization coefficient\n")
+        write(io, "numRTI,numSFF,method,kernel,ms-ssim (just structure),ms-ssim,average psnr,Z normalization coefficient\n")
 
         for f in folderList
             for method in methodList
@@ -94,7 +78,7 @@ function WriteCSV(outputPath::String, folderList::Array{String}, methodList::Arr
 
                 for kernel in kernelList
                     # Create and write line to CSV
-                    lineOut = string(numRTI, ",", numSFF, ",", method, ",", kernel, ",", rmseList[f,method,kernel], ",", irmseList[f,method,kernel], ",", snrDict[f,method,kernel], ",", psnrDict[f,method,kernel], ",", ZMax, ",", RMax, "\n")
+                    lineOut = string(numRTI, ",", numSFF, ",", method, ",", kernel, ",", ssimDict[f,method,kernel], ",", msssimDict[f,method,kernel], ",", psnrDict[f,method,kernel], ",", ZMax, "\n")
                     write(io, lineOut)
                 end
             end
@@ -102,38 +86,6 @@ function WriteCSV(outputPath::String, folderList::Array{String}, methodList::Arr
     end
 end
 
-function WriteCSV(outputPath::String, folderList::Array{String}, methodList::Array{String}, kernelList::Array{String}, rmseList::Dict, irmseList::Dict, ZMax::Float64, RMax::Float64)
-
-    # Write out comparison results
-    println("Writing results to text file...")
-    open(outputPath, "w") do io
-
-        # Write header
-        write(io, "numRTI,numSFF,method,kernel,rmse,inverse rmse,average snr,average psnr,Z normalization coefficient,R normalization coefficient\n")
-
-        for f in folderList
-            for method in methodList
-
-                # Parse inputs for proper number of RTI and SFF based on method used
-                numRTI = 0
-                numSFF = 0
-
-                if lowercase(method) == "sff"
-                    numRTI = 0
-                    numSFF = parse(Int64, f)
-                elseif lowercase(method) != "sff"
-                    numRTI, numSFF = ParseFolderName(f)
-                end
-
-                for kernel in kernelList
-                    # Create and write line to CSV
-                    lineOut = string(numRTI, ",", numSFF, ",", method, ",", kernel, ",", rmseList[f,method,kernel], ",", irmseList[f,method,kernel], ",", ZMax, ",", RMax, "\n")
-                    write(io, lineOut)
-                end
-            end
-        end
-    end
-end
 
 function ParseFolderName(folderName)
     """
@@ -171,7 +123,6 @@ function CompositeFromDepthMap(fileList, depthMap)
         for c in range(1, stop=size(depthMap, 2))
 
             z = Integer(round(depthMap[r,c]))
-            # z = depthMap[r,c]
 
             outputImage[r,c,:] = imageList[z][r,c,:]
 

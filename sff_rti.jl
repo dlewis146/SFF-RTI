@@ -5,7 +5,7 @@ include("./sff.jl")
 include("./IlluminationInvariance.jl")
 include("./ImageUtilities.jl")
 
-global ACCEPTED_METHODS = ["fvg", "mean", "std"]
+global ACCEPTED_METHODS = ["fvg", "mean", "max"]
 global ACCEPTED_KERNELS = ["sml", "sobel"]
 
 function FindSFFEquivalent(baseFolder)
@@ -20,6 +20,10 @@ function FindSFFEquivalent(baseFolder)
              Equivalent SFF folder:      `.../SFF/20/`
     """
 
+    # splitList = split(baseFolder, "/")
+    # basefolderName = splitList[lastindex(splitList)-1]
+    # _, numSFF = ParseFolderName(basefolderName)
+
     _, numSFF = ParseFolderName(basename(baseFolder))
 
     # NOTE: Assumes path format of "{DRIVE}/Research/Generated Data/Blender/{OBJECT TITLE}/{METHOD}/
@@ -31,16 +35,16 @@ function FindSFFEquivalent(baseFolder)
         folderName = join(splitpath(baseFolder)[1:lastindex(splitpath(baseFolder))-3], "/")
 
         # Create expected SFF folder path
-        folderName = folderName*"/SFF/"*splitpath(baseFolder)[lastindex(splitpath(baseFolder))-1]*"/"*numSFF*"/"
+        folderName = folderName*"/SFF/"*splitpath(baseFolder)[lastindex(splitpath(baseFolder))-1]*"/"*string(numSFF)*"/"
     else
         # Get base path up through the main object folder
         folderName = join(splitpath(baseFolder)[1:lastindex(splitpath(baseFolder))-2], "/")
 
         # Create expected SFF folder path
-        folderName = folderName*"/SFF/"*numSFF*"/"
+        folderName = folderName*"/SFF/"*string(numSFF)*"/"
     end
-   
-    # Make sure there aren't multiple CSV files in the base path
+
+    # Make sure directory exists
     if isdir(folderName) == false
         error(@printf("\nCannot find equivalent SFF acquisition for `%s`\n", basename(baseFolder)))
     end
@@ -48,7 +52,7 @@ function FindSFFEquivalent(baseFolder)
     return folderName
 end
 
-function sff_rti(baseFolder, method="fvg", kernel="sobel"; ksize::Tuple{Int,Int}=(3,3), outputFolder=nothing, write_maps=false, compute_snr=false)
+function sff_rti(baseFolder, method="fvg", kernel="sobel"; ksize::Tuple{Int,Int}=(3,3), outputFolder=nothing, write_maps=false, compute_psnr=false)
 
     # Make sure that `method` and `kernel` are lowercase for parsing compatibility
     method = lowercase(method)
@@ -84,7 +88,7 @@ function sff_rti(baseFolder, method="fvg", kernel="sobel"; ksize::Tuple{Int,Int}
     snrDict = Dict()
     psnrDict = Dict()
 
-    if compute_snr == true
+    if compute_psnr == true
         # Find equivalent SFF data collection
         sffFolderPath = FindSFFEquivalent(baseFolder)
 
@@ -97,7 +101,6 @@ function sff_rti(baseFolder, method="fvg", kernel="sobel"; ksize::Tuple{Int,Int}
 
         csvPathSFF = glob("*.csv", sffFolderPath)[1]
         sffCSV = CSV.File(csvPathSFF; select=["image", "z_cam"])
-        # image = CSV.File(csvPathSFF; select=[""]
     end
 
 
@@ -162,8 +165,8 @@ function sff_rti(baseFolder, method="fvg", kernel="sobel"; ksize::Tuple{Int,Int}
             
             if method == "mean"
                 focusMap = ComputeMeanImage(gradientList)
-            elseif method == "std"
-                focusMap = ComputeSTDImage(gradientList)
+            elseif method == "max"
+                focusMap = maximum(ImageList2Cube(gradientList), dims=3)[:,:,1]
             end
         end
 
@@ -175,7 +178,7 @@ function sff_rti(baseFolder, method="fvg", kernel="sobel"; ksize::Tuple{Int,Int}
         # Track maximum required offset value so that we can keep all images to be compared relative to one another. 
         global offsetAmount = minimum([minimum(focusMap), offsetAmount])
 
-        if compute_snr == true
+        if compute_psnr == true
 
             for sffRow in sffCSV
 
@@ -186,12 +189,12 @@ function sff_rti(baseFolder, method="fvg", kernel="sobel"; ksize::Tuple{Int,Int}
                     sffFocusMap = FilterImageCombined(sffImg, kernel, ksize)
 
                     # Determine what value to use for image normalization
-                    snrNormalizationCoefficient = maximum([maximum(focusMap), maximum(sffFocusMap)])
+                    # snrNormalizationCoefficient = maximum([maximum(focusMap), maximum(sffFocusMap)])
 
                     # NOTE: Am I doing the right thing in normalizing these to be on then same scale???? Should I just be normalizing or perhaps not touching them at all?
-                    snrDict[zPosList[idx]] = 10*log10(mean(focusMap./snrNormalizationCoefficient)/rmse(sffFocusMap./snrNormalizationCoefficient, focusMap./snrNormalizationCoefficient))
 
-                    psnrDict[zPosList[idx]] = 10*log10(1/mse(sffFocusMap./snrNormalizationCoefficient, focusMap./snrNormalizationCoefficient))
+                    psnrDict[zPosList[idx]] = assess_psnr(sffFocusMap, focusMap)
+                    # psnrDict[zPosList[idx]] = 10*log10(1/mse(sffFocusMap./snrNormalizationCoefficient, focusMap./snrNormalizationCoefficient))
 
                 end
             end
@@ -202,20 +205,15 @@ function sff_rti(baseFolder, method="fvg", kernel="sobel"; ksize::Tuple{Int,Int}
 
         # Store focus map in list and iterate progress bar
         push!(fvgList, focusMap)
-        ProgressMeter.next!(prog; showvalues= [(:"Current Distance", zPosList[idx]), (:"Offset Amount", offsetAmount)])
+        ProgressMeter.next!(prog; showvalues= [(:"Current Distance", zPosList[idx]), (:"Offset Amount", offsetAmount), (:"Number of light angles", length(angleList)), (:"Number of Z positions", length(zPosList))])
     end 
 
     # Add offset amount to all focus maps
-    # for focusMap in fvgList
-
     fvgList = [fvgList[idx] = fvgList[idx].+abs(offsetAmount) for idx in eachindex(fvgList)]
     focusMapNormCoeff = maximum(maximum.(fvgList))
 
-    for idx in eachindex(fvgList)
-        # fvgList[idx] = fvgList[idx] .+ abs(offsetAmount)
-
-        if write_maps == true
-
+    if write_maps == true
+        for idx in eachindex(fvgList)
             outputFolderConcatenated = string(outputFolder, "/FOCUS MAPS/", basename(baseFolder), " ", uppercase(method), " ", uppercase(kernel), "/")
 
             # Make sure all nested folders exist and create them if not
@@ -224,16 +222,15 @@ function sff_rti(baseFolder, method="fvg", kernel="sobel"; ksize::Tuple{Int,Int}
 
             save(outputFolderConcatenated*lpad(string(idx), length(string(length(fvgList))), "0")*".png", fvgList[idx]./focusMapNormCoeff)
         end
-
     end
 
     println("Computing depth map...")
-    Z, R = sff(fvgList, zPosList, 2, true)
+    Z = sff(fvgList, zPosList; sampleStep=2, median=true)
 
-    if compute_snr == false
+    if compute_psnr == false
         snrDict = Dict(NaN=>NaN)
         psnrDict = Dict(NaN=>NaN)
     end
 
-    return Z, R, mean(values(snrDict)), mean(values(psnrDict))
+    return Z, mean(values(psnrDict))
 end

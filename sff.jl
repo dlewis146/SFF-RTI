@@ -1,4 +1,4 @@
-function sff(imageList, focusList, sampleStep=2, median=true)
+function sff(imageList, focusList; sampleStep=2, median=true)
     """
     Shape from Focus algorithm originally programmed in Matlab by Said Pertuz
 
@@ -22,9 +22,7 @@ function sff(imageList, focusList, sampleStep=2, median=true)
     end
 
     # Estimate depth map
-    YMax, zi, InterpolatedFocusMeasures = GaussianInterpolation3Pt(focusList, imageStack, sampleStep)
-
-    z = zi
+    YMax, z = GaussianInterpolation3Pt(focusList, imageStack, sampleStep)
 
     # NOTE:Casting YMax to Int for use as indices
     Ic = round.(Int, YMax)
@@ -68,7 +66,7 @@ function GaussianInterpolation3Pt(x, imageStack, Gstep=2)
     # Make sure depth values are within boundaries of 3D interpolation window,
     # AKA make sure that if we Gstep from a max focus point to do interpolation,
     # make sure we're not going to try and access a point outside of our scope
-    idxMaxPadded = padarray(idxMax, Pad(:replicate,Gstep+1, Gstep+1))
+    # idxMaxPadded = padarray(idxMax, Pad(:replicate, Gstep, Gstep))
 
     interpolatedD = zeros(Float64, M, N)
     # interpolatedF = zeros(Float64, M, N)
@@ -77,7 +75,8 @@ function GaussianInterpolation3Pt(x, imageStack, Gstep=2)
     for i in range(1, stop=M)
         for j in range(1, stop=N)
 
-            z = idxMaxPadded[i,j]
+            z = idxMax[i,j]
+            # z = idxMaxPadded[i,j]
 
             yLow  = imageStack[i,j,z-Gstep]
             yMid  = imageStack[i,j,z]
@@ -98,7 +97,7 @@ function GaussianInterpolation3Pt(x, imageStack, Gstep=2)
         end
     end
 
-    return idxMax, interpolatedD, interpolatedF
+    return idxMax, interpolatedD
 end
 
 
