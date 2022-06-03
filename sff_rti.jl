@@ -20,10 +20,6 @@ function FindSFFEquivalent(baseFolder)
              Equivalent SFF folder:      `.../SFF/20/`
     """
 
-    # splitList = split(baseFolder, "/")
-    # basefolderName = splitList[lastindex(splitList)-1]
-    # _, numSFF = ParseFolderName(basefolderName)
-
     _, numSFF = ParseFolderName(basename(baseFolder))
 
     # NOTE: Assumes path format of "{DRIVE}/Research/Generated Data/Blender/{OBJECT TITLE}/{METHOD}/
@@ -52,30 +48,15 @@ function FindSFFEquivalent(baseFolder)
     return folderName
 end
 
-function sff_rti(baseFolder, method="fvg", kernel="sobel"; ksize::Tuple{Int,Int}=(3,3), outputFolder=nothing, write_maps=false, compute_psnr=false)
-
-    # Make sure that `method` and `kernel` are lowercase for parsing compatibility
-    method = lowercase(method)
-    kernel = lowercase(kernel)
-
-    # Make sure that given method and kernel are compatible with methods
-    if !(method in ACCEPTED_METHODS)
-        error(@printf("\nGiven method { %s } isn't compatible with current version of `sff_rti`\n", method))
-    end
-    if !(kernel in ACCEPTED_KERNELS)
-        error(@printf("\nGiven kernel { %s } isn't compatible with current version of `sff_rti`\n", kernel))
-    end
+function ComputeMultiLightGradients(baseFolder, method, kernel; ksize::Tuple{Int,Int}=(3,3), write_maps=false, compute_psnr=false)
 
     # Make sure there aren't multiple CSV files in the base path
     if length(glob("*.csv", baseFolder)) > 1
         error("\nMore than 1 CSV file found in given folder\n")
     elseif length(glob("*.csv", baseFolder)) == 0
+        println(baseFolder)
         error("\nCSV file not found in given folder\n")
     end
-
-    # if numberLights !== nothing
-    #     @printf("Using %i light positions\n", numberLights)
-    # end
 
     csvPath = glob("*.csv", baseFolder)[1]
     folderPath = baseFolder * "/Renders/"
@@ -85,11 +66,10 @@ function sff_rti(baseFolder, method="fvg", kernel="sobel"; ksize::Tuple{Int,Int}
 
     sffCSV = nothing
     sffFolderPath = ""
-    snrDict = Dict()
     psnrDict = Dict()
 
+    # If computing PSNR, find equivalent SFF data collection and parse CSV for filenames
     if compute_psnr == true
-        # Find equivalent SFF data collection
         sffFolderPath = FindSFFEquivalent(baseFolder)
 
         # Make sure there aren't multiple CSV files in the base path
@@ -103,15 +83,15 @@ function sff_rti(baseFolder, method="fvg", kernel="sobel"; ksize::Tuple{Int,Int}
         sffCSV = CSV.File(csvPathSFF; select=["image", "z_cam"])
     end
 
-
+    
     # Get all Z positions and remove duplicates
     # NOTE: Sort to make sure they're stored in ascending order
     zPosList = sort(unique([row.z_cam for row in CSV.File(csvPath; select=["z_cam"])]), rev=true)
-    # zPosList = sort(unique([row.z_cam for row in CSV.File(csvPath; select=["z_cam"])]))
     println("NOTE: Reversing zPosList")
+
     println("NOTE: Adding constant of 10 to x_lamp,y_lamp,z_lamp in attempt to keep all values about 0")
 
-    fvgList = []
+    gradientList = []
     global offsetAmount = 0
     global focusMapNormCoeff = 0
 
@@ -144,13 +124,6 @@ function sff_rti(baseFolder, method="fvg", kernel="sobel"; ksize::Tuple{Int,Int}
             end
         end
 
-        # # If numberLights is specified, evenly select files/light positions
-        # if numberLights !== nothing
-        #     idxList = [Int(floor(i)) for i in range(1, stop=size(angleList,1), length=numberLights)]
-        #     angleList = angleList[idxList]
-        #     fileList = fileList[idxList]
-        # end
-
         # Compute desired focus map 
         focusMap = nothing
         if method == "fvg"
@@ -173,15 +146,13 @@ function sff_rti(baseFolder, method="fvg", kernel="sobel"; ksize::Tuple{Int,Int}
         # Average focus map
         focusMap = FilterImageAverage(focusMap)
 
-        # Offsetting image values attempts to push dynamic range so that all values are positive and will no longer give errors when computing logs during Gaussian interpolation
+        ##NOTE: Offsetting image values attempts to push dynamic range so that all values are positive and will no longer give errors when computing logs during Gaussian interpolation
 
         # Track maximum required offset value so that we can keep all images to be compared relative to one another. 
         global offsetAmount = minimum([minimum(focusMap), offsetAmount])
 
         if compute_psnr == true
-
             for sffRow in sffCSV
-
                 if sffRow.z_cam == zPosList[idx]
 
                     sffImg = Gray.(load(sffFolderPath*"/Renders/"*sffRow.image*".png"))
@@ -189,48 +160,131 @@ function sff_rti(baseFolder, method="fvg", kernel="sobel"; ksize::Tuple{Int,Int}
                     sffFocusMap = FilterImageCombined(sffImg, kernel, ksize)
 
                     # Determine what value to use for image normalization
-                    # snrNormalizationCoefficient = maximum([maximum(focusMap), maximum(sffFocusMap)])
+                    snrNormalizationCoefficient = maximum([maximum(focusMap), maximum(sffFocusMap)])
 
-                    # NOTE: Am I doing the right thing in normalizing these to be on then same scale???? Should I just be normalizing or perhaps not touching them at all?
-
-                    psnrDict[zPosList[idx]] = assess_psnr(sffFocusMap, focusMap)
-                    # psnrDict[zPosList[idx]] = 10*log10(1/mse(sffFocusMap./snrNormalizationCoefficient, focusMap./snrNormalizationCoefficient))
+                    # NOTE: Avoiding usage of built-in PSNR assessment function (assess_psnr) because it appears to be checking the peak values of the array to try and figure out the dynamic range for normalization and I'm not super convinced by that considering Julia is handling images a bit differently than other languages
+                    psnrDict[zPosList[idx]] = 10*log10(1/mse(sffFocusMap./snrNormalizationCoefficient, focusMap./snrNormalizationCoefficient))
 
                 end
             end
 
         end
 
-
-
         # Store focus map in list and iterate progress bar
-        push!(fvgList, focusMap)
+        push!(gradientList, focusMap)
         ProgressMeter.next!(prog; showvalues= [(:"Current Distance", zPosList[idx]), (:"Offset Amount", offsetAmount), (:"Number of light angles", length(angleList)), (:"Number of Z positions", length(zPosList))])
     end 
 
     # Add offset amount to all focus maps
-    fvgList = [fvgList[idx] = fvgList[idx].+abs(offsetAmount) for idx in eachindex(fvgList)]
-    focusMapNormCoeff = maximum(maximum.(fvgList))
+    gradientList = [gradientList[idx] = gradientList[idx].+abs(offsetAmount) for idx in eachindex(gradientList)]
+    focusMapNormCoeff = maximum(maximum.(gradientList))
 
     if write_maps == true
-        for idx in eachindex(fvgList)
+        for idx in eachindex(gradientList)
             outputFolderConcatenated = string(outputFolder, "/FOCUS MAPS/", basename(baseFolder), " ", uppercase(method), " ", uppercase(kernel), "/")
 
             # Make sure all nested folders exist and create them if not
             ispath(outputFolder*"/FOCUS MAPS/") || mkpath(outputFolder*"/FOCUS MAPS/")
             ispath(outputFolderConcatenated) || mkpath(outputFolderConcatenated)
 
-            save(outputFolderConcatenated*lpad(string(idx), length(string(length(fvgList))), "0")*".png", fvgList[idx]./focusMapNormCoeff)
+            save(outputFolderConcatenated*lpad(string(idx), length(string(length(gradientList))), "0")*".png", gradientList[idx]./focusMapNormCoeff)
         end
     end
 
-    println("Computing depth map...")
-    Z = sff(fvgList, zPosList; sampleStep=2, median=true)
+    return gradientList, zPosList, psnrDict
 
-    if compute_psnr == false
-        snrDict = Dict(NaN=>NaN)
-        psnrDict = Dict(NaN=>NaN)
+end
+
+function sff_rti(baseFolder, innerFolderList::Array{String}, methodList::Array{String}, kernelList::Array{String}; ksizeList=[3], write_maps=false, write_csv=false, compute_psnr=false, compute_ssim=false, outputFolder="", gtPath="", ZMax=NaN)
+    """
+    Function that takes in a folder which contains a subfolder of simulated images and a CSV corresponding to the RTI and SFF parameters for those images. Multi-light integration methods are applied for each focus position (full vector gradient, mean gradient reponse, or maximum gradient response) and then are all passed into a Shape from Focus function to generate a depth map. 
+        
+    Computation of MS-SSIM and PSNR are also possible for statistical comparison. The MS-SSIM requires the path to a ground truth depth map and the PSNR requires there to be an equivalent SFF acquisition (see `FindSFFEquivalent` called in the function `ComputeMultiLightGradients`).
+    """
+
+    # Read in ground truth for SSIM comparison if needed
+    GT = nothing
+
+    if compute_ssim == true && isfile(gtPath)
+        GT = Gray2Float64(load(gtPath))
     end
 
-    return Z, mean(values(psnrDict))
+    # Create empty dictionaries to gather MS-SIM, MS-SSIM (Just structure) and PSNR 
+    structureDict = Dict()
+    msssimDict = Dict()
+    psnrDict = Dict()
+    
+    # outputStructList = Dict()
+    outputStructList = []
+    for f in innerFolderList
+        for method in methodList
+            for kernel in kernelList
+                for ksize in ksizeList
+
+                    println()
+
+                    # Make sure that `method` and `kernel` are lowercase for parsing compatibility
+                    method = lowercase(method)
+                    kernel = lowercase(kernel)
+
+                    # Call function to compute multi-light gradients using desired method
+                    gradientList, zPosList, psnrDict = ComputeMultiLightGradients(baseFolder*f, method, kernel; ksize=(ksize,ksize), write_maps=write_maps, compute_psnr=compute_psnr)
+
+                    # Compute SFF
+                    Z = sff(gradientList, zPosList; sampleStep=2, median=true)
+                    psnrMean = mean(values(psnrDict))
+
+                    numRTI, numSFF = ParseFolderName(f)
+
+                    if outputFolder !== nothing
+                        push!(outputStructList, FileSet(Z,numRTI,numSFF,method,kernel))
+                    end
+
+                    # Normalize computed depth map so that it's placed from 0-1
+                    Z_normalized = imageDisp01(Z)
+
+                    if compute_ssim
+                        # Compute structural comparison measure and MS-SSIM then store all statistical measures in appropriate dictionaries
+                        """
+                        Here, the first parameter is the kernel used to weight the neighbourhood of each pixel while calculating the SSIM locally, and defaults to KernelFactors.gaussian(1.5, 11). The second parameter is the set of weights (α, β, γ) given to the lunimance (L), contrast (C) and structure (S) terms while calculating the SSIM, and defaults to (1.0, 1.0, 1.0). Recall that SSIM is defined as Lᵅ × Cᵝ × Sᵞ.
+                        Source: https://juliaimages.org/stable/examples/image_quality_and_benchmarks/structural_similarity_index/
+                        """
+
+                        iqi = MSSSIM(KernelFactors.gaussian(1.5,11), (0.0,0.0,1.0))
+                        structureDict[f,method,kernel,ksize] = assess(iqi, GT, Z_normalized)
+
+                        # ssim[f,method,kernel]  = assess_ssim(GT, Z_normalized)
+                        msssimDict[f,method,kernel,ksize]  = assess_msssim(GT, Z_normalized)
+                    elseif !compute_ssim
+                        structureDict[f,method,kernel,ksize] = NaN
+                        msssimDict[f,method,kernel,ksize] = NaN
+                    end
+
+                    psnrDict[f,method,kernel,ksize] = psnrMean
+
+                end
+            end
+        end
+    end
+
+    if isnan(ZMax) 
+        ZMax = FindFileSetMax(outputStructList)
+    else
+        println("NOTE: Using given ZMax normalization coefficient")
+    end
+
+    if write_maps == true
+        for ksize in ksizeList
+            WriteMaps(outputStructList, outputFolder*string(ksize), ZMax)
+        end
+    end
+
+    if write_csv == true
+        # csvPath = @printf("%s/Ground truth comparison results (%i,%i).csv", outputFolder, ksize[1], ksize[2])
+        csvPath = outputFolder * "/Ground truth comparison results.csv"
+
+        WriteCSV(csvPath, innerFolderList, methodList, kernelList, ksizeList, structureDict, msssimDict, psnrDict, ZMax)
+    end
+
 end
+

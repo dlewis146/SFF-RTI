@@ -6,6 +6,8 @@ struct FileSet
     kernel::String
 end
 
+function FixPathEnding(f)  if last(f) !== '/' && last(f) !== '\\'; return f*"/" else return f end end
+
 function FindFileSetMax(structList)
     """
     Takes in list of FileSet structs and returns global maximum for Z. 
@@ -44,6 +46,8 @@ function WriteMaps(structList, outputFolder, ZMax=nothing)
         normalsZ = shiftNormalsRange(normals[:,:,3])
         normalsColor = colorview(RGB, normalsX, normalsY, normalsZ)
 
+        outputFolder = FixPathEnding(outputFolder)
+
         outputFolderConcatenated = outputFolder*"/"*uppercase(s.method)*" "*uppercase(s.kernel)*"/"
         ispath(outputFolderConcatenated) || mkpath(outputFolderConcatenated)
 
@@ -53,33 +57,36 @@ function WriteMaps(structList, outputFolder, ZMax=nothing)
     end
 end
 
-function WriteCSV(outputPath::String, folderList::Array{String}, methodList::Array{String}, kernelList::Array{String}, ssimDict::Dict, msssimDict::Dict, ZMax::Float64, psnrDict::Dict)
+function WriteCSV(outputPath::String, folderList::Array{String}, methodList::Array{String}, kernelList::Array{String}, ksizeList::Array{Int}, ssimDict::Dict, msssimDict::Dict, psnrDict::Dict, ZMax::Float64)
 
     # Write out comparison results
     println("Writing results to text file...")
     open(outputPath, "w") do io
 
         # Write header
-        write(io, "numRTI,numSFF,method,kernel,ms-ssim (just structure),ms-ssim,average psnr,Z normalization coefficient\n")
+        write(io, "numRTI,numSFF,method,kernel,ms-ssim (just structure),ms-ssim,average psnr,ksize,Z normalization coefficient\n")
 
         for f in folderList
             for method in methodList
+                for ksize in ksizeList
 
-                # Parse inputs for proper number of RTI and SFF based on method used
-                numRTI = 0
-                numSFF = 0
-
-                if lowercase(method) == "sff"
+                    # Parse inputs for proper number of RTI and SFF based on method used
                     numRTI = 0
-                    numSFF = parse(Int64, f)
-                elseif lowercase(method) != "sff"
-                    numRTI, numSFF = ParseFolderName(f)
-                end
+                    numSFF = 0
 
-                for kernel in kernelList
-                    # Create and write line to CSV
-                    lineOut = string(numRTI, ",", numSFF, ",", method, ",", kernel, ",", ssimDict[f,method,kernel], ",", msssimDict[f,method,kernel], ",", psnrDict[f,method,kernel], ",", ZMax, "\n")
-                    write(io, lineOut)
+                    if lowercase(method) == "sff"
+                        numRTI = 0
+                        numSFF = parse(Int64, f)
+                    elseif lowercase(method) != "sff"
+                        numRTI, numSFF = ParseFolderName(f)
+                    end
+
+                    for kernel in kernelList
+                        # Create and write line to CSV
+                        lineOut = string(numRTI, ",", numSFF, ",", method, ",", kernel, ",", ssimDict[f,method,kernel,ksize], ",", msssimDict[f,method,kernel,ksize], ",", psnrDict[f,method,kernel,ksize], ",", ksize, ",", ZMax, "\n")
+                        write(io, lineOut)
+                    end
+            
                 end
             end
         end
