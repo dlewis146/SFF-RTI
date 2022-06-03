@@ -26,6 +26,21 @@ function ReadImageList(file_list; grayscale=true)
     return img_list
 end
 
+function ImageList2Cube(imageList)
+    """
+    Takes in a list of grayscale images and simply places them in an image cube
+    """
+
+    cubeOut = zeros(size(imageList[1], 1), size(imageList[1], 2), length(imageList))
+
+    for (idx, image) in enumerate(imageList)
+        cubeOut[:,:,idx] = image
+    end
+   
+    return cubeOut
+end
+
+
 function FilterImageCombined(img, filter="sobel", ksize=(3,3))
     """
     This function is written with the purpose of being a "handler" function
@@ -193,26 +208,6 @@ function ComputeMeanImage(imageList)
 
 end
 
-function ComputeSTDImage(imageList)
-
-    stdImageStack = zeros(size(imageList[1], 1), size(imageList[1], 2), length(imageList))
-
-    for idx in range(1, stop=length(imageList))
-        stdImageStack[:,:,idx] = imageList[idx]
-    end
-
-    stdImageOut = zero(imageList[1])
-
-    for y in range(1, stop=size(stdImageStack, 1))
-        for x in range(1, stop=size(stdImageStack, 2))
-
-            stdImageOut[y,x] = std(stdImageStack[y,x,:])
-        end
-    end
-
-    return stdImageOut
-
-end
 
 function SumModifiedLaplacian(img, window_size::Int = 5, step_size::Int = 1, threshold = 7/255)
 
@@ -297,6 +292,8 @@ function PlotGaussian(σ=1, l=3)
     Takes in σ as standard deviation of desired Gaussian function and l as length of kernel (must be odd) and uses Images.KernelFactors to create x and y vectors that can be used to plot a 1-dimensional Gaussian function.
 
     This is intended to be used for creating a variably sized image kernel.
+
+    TODO: Rename more appropriately
     """
 
     y = collect( KernelFactors.gaussian(σ, l) )
