@@ -26,7 +26,7 @@ function(lp::LightAngle)()
 end
 
 
-function ComputeFullVectorGradient(file_list, angle_list, kernel="sobel", ksize::Tuple{Int,Int}=(3,3))
+function ComputeFullVectorGradient(file_list, angle_list, kernel::String="sobel", ksize::Tuple{Int,Int}=(3,3))
     """
     Takes in a list of image filepaths as well as a list of LightAngle 
     objects (correlated with images by stored order). Returns a single

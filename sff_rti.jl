@@ -48,7 +48,7 @@ function FindSFFEquivalent(baseFolder)
     return folderName
 end
 
-function ComputeMultiLightGradients(baseFolder, method, kernel; ksize::Tuple{Int,Int}=(3,3), write_maps=false, compute_psnr=false)
+function ComputeMultiLightGradients(baseFolder::String, method::String, kernel::String; ksize::Tuple{Int,Int}=(3,3), write_maps::Bool=false, compute_psnr::Bool=false)
 
     # Make sure there aren't multiple CSV files in the base path
     if length(glob("*.csv", baseFolder)) > 1
