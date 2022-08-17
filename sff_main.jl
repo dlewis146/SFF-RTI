@@ -5,7 +5,7 @@ include("./ImageUtilities.jl")
 
 global ACCEPTED_KERNELS = ["sml", "sobel"]
 
-function sff_main(baseFolder, kernel="sml"; ksize=(3,3), outputFolder=nothing, write_maps=false)
+function sff_main(baseFolder, kernel="sml"; ksize=(5,5), outputFolder=nothing, write_maps=false)
        
     # Make sure that given kernel is compatible with methods
     if !(kernel in ACCEPTED_KERNELS)
@@ -63,70 +63,71 @@ function sff_main(baseFolder, kernel="sml"; ksize=(3,3), outputFolder=nothing, w
     return Z
 end
 
+if abspath(PROGRAM_FILE) == @__FILE__
 
-base = "J:/Research/Generated Data/Blender/Statue du parc d'Austerlitz/SFF/"
-# base = "J:/Research/Generated Data/Blender/Statue du parc d'Austerlitz/SFF/Restrained Z/"
+    base = "J:/Research/Generated Data/Blender/Statue du parc d'Austerlitz/SFF/Restrained Z/"
 
-innerFolderList = ["5", "100"]
-# kernelList = ["sml"]
-kernelList = ["sobel", "sml"]
+    innerFolderList = ["100"]
+    kernelList = ["sml"]
 
-outputFolder = "J:/Image Out/Statue (5,5)/"
+    outputFolder = "J:/Image Out/Restrained Z/Window Size Tests/(5,5)/"
 
-# Create empty dictionaries to gather MS-SIM, MS-SSIM (Just structure) and PSNR 
-msssimDict = Dict()
-structureDict = Dict()
-psnrDict = Dict()
+    # Create empty dictionaries to gather MS-SIM, MS-SSIM (Just structure) and PSNR 
+    msssimDict = Dict()
+    structureDict = Dict()
+    psnrDict = Dict()
 
-compute_ssim = true
+    compute_ssim = true
 
-# Read in ground truth depth map for comparison
-# NOTE: Using RTI collection due to original GT collection having a different camera setup
-GT = Gray2Float64(Gray.(load("J:/Research/Generated Data/Blender/Statue du parc d'Austerlitz/RTI/Black Background - FullScale/Depth/Image0001.png")))
+    # Read in ground truth depth map for comparison
+    # NOTE: Using RTI collection due to original GT collection having a different camera setup
+    GT = Gray2Float64(Gray.(load("J:/Research/Generated Data/Blender/Statue du parc d'Austerlitz/Ground Truth Restrained Z/Depth/Image0001.png")))
 
-outputStructList = []
+    outputStructList = []
 
-for f in innerFolderList
-    for kernel in kernelList
+    for f in innerFolderList
+        for kernel in kernelList
 
-        println("Running ", kernel, " for ", f)
+            println("Running ", kernel, " for ", f)
 
-        # Run SFF method
-        Z = sff_main(base*f, kernel; ksize=(5,5), outputFolder=outputFolder, write_maps=true)
+            # Run SFF method
+            Z = sff_main(base*f, kernel; ksize=(5,5), outputFolder=outputFolder, write_maps=true)
 
-        if outputFolder !== nothing
-            push!(outputStructList, FileSet(Z,0,parse(Int,f),"SFF",kernel))
+            if outputFolder !== nothing
+                push!(outputStructList, FileSet(Z,0,parse(Int,f),"SFF",kernel))
+            end
+
+            # Normalize computed depth map so that it's placed from 0-1
+            # Z_normalized = imageDisp01(Z)
+            Z_normalized = complement.(imageDisp01(Z))
+
+            if compute_ssim
+                # Compute SSIM and MS-SSIM then store all statistical measures in appropriate dictionaries
+                # TEMP: Trying to compute MS-SSIM and MS-SSIM with just structural comparison taken into account
+                """
+                Here, the first parameter is the kernel used to weight the neighbourhood of each pixel while calculating the SSIM locally, and defaults to KernelFactors.gaussian(1.5, 11). The second parameter is the set of weights (α, β, γ) given to the lunimance (L), contrast (C) and structure (S) terms while calculating the SSIM, and defaults to (1.0, 1.0, 1.0). Recall that SSIM is defined as Lᵅ × Cᵝ × Sᵞ.
+                Source: https://juliaimages.org/stable/examples/image_quality_and_benchmarks/structural_similarity_index/
+                """
+
+                iqi = MSSSIM(KernelFactors.gaussian(1.5,11), (0.0,0.0,1.0))
+                structureDict[f,"sff",kernel] = assess(iqi, GT, Z_normalized)
+
+                # ssim[f,method,kernel]  = assess_ssim(GT, Z_normalized)
+                msssimDict[f,"sff",kernel]  = assess_msssim(GT, Z_normalized)
+            elseif !compute_ssim
+                structureDict[f,"sff",kernel] = NaN
+                msssimDict[f,"sff",kernel] = NaN
+            end
+            psnrDict[f,"sff",kernel] = NaN
         end
-
-        # Normalize computed depth map so that it's placed from 0-1
-        # Z_normalized = imageDisp01(Z)
-        Z_normalized = complement.(imageDisp01(Z))
-
-        if compute_ssim
-            # Compute SSIM and MS-SSIM then store all statistical measures in appropriate dictionaries
-            # TEMP: Trying to compute MS-SSIM and MS-SSIM with just structural comparison taken into account
-            """
-            Here, the first parameter is the kernel used to weight the neighbourhood of each pixel while calculating the SSIM locally, and defaults to KernelFactors.gaussian(1.5, 11). The second parameter is the set of weights (α, β, γ) given to the lunimance (L), contrast (C) and structure (S) terms while calculating the SSIM, and defaults to (1.0, 1.0, 1.0). Recall that SSIM is defined as Lᵅ × Cᵝ × Sᵞ.
-            Source: https://juliaimages.org/stable/examples/image_quality_and_benchmarks/structural_similarity_index/
-            """
-
-            iqi = MSSSIM(KernelFactors.gaussian(1.5,11), (0.0,0.0,1.0))
-            structureDict[f,method,kernel] = assess(iqi, GT, Z_normalized)
-
-            # ssim[f,method,kernel]  = assess_ssim(GT, Z_normalized)
-            msssimDict[f,method,kernel]  = assess_msssim(GT, Z_normalized)
-        elseif !compute_ssim
-            structureDict[f,method,kernel] = NaN
-            msssimDict[f,method,kernel] = NaN
-        end
-        psnrDict[f,"sff",kernel] = NaN
     end
+
+    ZMax = FindFileSetMax(outputStructList)
+
+    if outputFolder !== nothing
+        WriteMaps(outputStructList, outputFolder, nothing)
+    end
+
+    WriteCSV(outputFolder*"/Ground truth comparison results SFF (5,5).csv", innerFolderList, ["sff"], kernelList, structureDict, msssimDict, ZMax, psnrDict)
+
 end
-
-ZMax = FindFileSetMax(outputStructList)
-
-if outputFolder !== nothing
-    WriteMaps(outputStructList, outputFolder, nothing)
-end
-
-WriteCSV(outputFolder*"/Ground truth comparison results SFF.csv", innerFolderList, ["sff"], kernelList, structureDict, msssimDict, ZMax, psnrDict)
