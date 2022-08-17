@@ -228,11 +228,15 @@ function sff_rti(baseFolder, innerFolderList::Array{String}, methodList::Array{S
                     kernel = lowercase(kernel)
 
                     # Call function to compute multi-light gradients using desired method
-                    gradientList, zPosList, psnrDict = ComputeMultiLightGradients(baseFolder*f, method, kernel; ksize=(ksize,ksize), write_maps=write_maps, compute_psnr=compute_psnr)
+                    gradientList, zPosList, psnrDictCurrent = ComputeMultiLightGradients(baseFolder*f, method, kernel; ksize=(ksize,ksize), write_maps=write_maps, compute_psnr=compute_psnr)
 
                     # Compute SFF
                     Z = sff(gradientList, zPosList; sampleStep=2, median=true)
-                    psnrMean = mean(values(psnrDict))
+
+                    psnrMean = 0.0
+                    if compute_psnr
+                        psnrMean = mean(values(psnrDictCurrent))
+                    end
 
                     numRTI, numSFF = ParseFolderName(f)
 
