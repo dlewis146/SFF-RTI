@@ -1,5 +1,7 @@
 using Statistics
 
+# David A. Lewis - June 27th, 2022
+
 function ReadImageList(file_list; grayscale=true)
     """
     Takes in a list of image filepaths and returns a list of image Arrays
@@ -25,6 +27,7 @@ function ReadImageList(file_list; grayscale=true)
    
     return img_list
 end
+
 
 function ImageList2Cube(imageList)
     """
@@ -96,26 +99,35 @@ function FilterImageCombined(img, filter="sobel", ksize=(3,3))
         # NOTE: I allow 2 factors to be given for the kernel sizes in general, but SML will only take the first value
         imgOut = SumModifiedLaplacian(img, Int(ksize[1]))
 
+    elseif filter == "variance"
+
+        """
+        NOTE: I allow 2 factors to be given for the kernel sizes in 
+        general, but variance will only take the first value for now for 
+        the sake of simplicity of implementation
+        """
+
+        step_size = 1
+
+        window_size_half::Int = Int(floor(ksize[1]/2))
+        dim_spacer::Int64 = window_size_half + step_size
+    
+        # Pad input image with replicated edges for half of window size
+        imagePadded = padarray(img, Pad(:replicate,dim_spacer,dim_spacer))
+
+        # Index through original size and compute variance for each pixel
+        for c in range(1, stop=size(img,1))
+            for r in range(1, stop=size(img,2))
+                imgOut[c,r] = var(imagePadded[c-dim_spacer:c+dim_spacer, r-dim_spacer:r+dim_spacer])
+            end
+        end
+        
     end
 
     return imgOut
 
 end
 
-function ImageHistogram(img, bins=256)
-
-    img = img./maximum(img)
-
-    hist = zeros(bins)
-
-    for value in img
-        valueRounded = Int(round(value*(bins-1))) + 1
-        hist[valueRounded] = hist[valueRounded] + 1
-    end
-
-    return hist
-
-end
 
 function FilterImageSeparate(img, filter="sobel", ksize=(3,3))
     """
@@ -123,6 +135,9 @@ function FilterImageSeparate(img, filter="sobel", ksize=(3,3))
     for filtering images. As it seems the calls for filtering images with
     standard kernels varies within the imfilter package, this function is
     meant to make that easier for the user.
+
+    FilterImageSeparate differs from FilterImageCombined in that this function 
+    returns the X and Y filtering results separately.
     """
 
     img = Gray2Float64(img)
@@ -178,7 +193,6 @@ function FilterImageSeparate(img, filter="sobel", ksize=(3,3))
 end
 
 
-
 function FilterImageAverage(img, KSize=(3,3), edges="replicate")
     """
     Takes in image, desired kernel size, and method of handling edge cases.
@@ -194,7 +208,55 @@ function FilterImageAverage(img, KSize=(3,3), edges="replicate")
 
 end
 
+
+function Histogram(img; bins=256)
+    """
+    Computes histogram of a given image and returns both a histogram and an 
+    ordered array that describes the DC range for each bin
+    """
+
+    img = imageNormalize(img)
+
+    hist = zeros(bins)
+
+    for value in img
+        valueRounded = Int(round(value*(bins-1))) + 1
+        hist[valueRounded] = hist[valueRounded] + 1
+    end
+
+    return hist
+end
+
+function Histogram(img, mask; bins=256)
+    """
+    Computes histogram of a given image and returns both a histogram and an 
+    ordered array that describes the DC range for each bin.
+
+    This alternative call for the `Histogram` method uses a BINARIZED image
+    to determine which pixels to consider in the computation of the histogram.
+    """
+
+    img = imageNormalize(img)
+
+    hist = zeros(bins)
+
+    for (idx, value) in enumerate(img)
+        if Int(mask[idx]) == 1
+            valueRounded = Int(round(value*(bins-1))) + 1
+            hist[valueRounded] = hist[valueRounded] + 1
+        end
+    end
+
+    return hist
+end
+
+
 function ComputeMeanImage(imageList)
+    """
+    Takes in a list of images and computes the average image.
+
+    Simply a convenience function and could probably be done more elegantly.
+    """
 
     meanImageBuild = zero(imageList[1])
 
@@ -210,6 +272,15 @@ end
 
 
 function SumModifiedLaplacian(img, window_size::Int = 5, step_size::Int = 1, threshold = 7/255)
+    """
+    Computes the sum-modified Laplacian. 
+
+        window_size sets the full size of the examined pixel neighborhood
+
+        step_size and threshold are described in the shape from focus literature
+        that originally proposed the SML.
+        Nayar, S. K., & Nakagawa, Y. (1994). Shape from Focus. IEEE Transactions on Pattern Analysis and Machine Intelligence, 16(8), 824–831. https://doi.org/10.1109/34.308479
+    """
 
     window_size_half::Int = Int(floor(window_size/2))
     # dim_spacer::Int = window_size_half
@@ -242,7 +313,18 @@ function SumModifiedLaplacian(img, window_size::Int = 5, step_size::Int = 1, thr
 
 end
 
+
 function SumModifiedLaplacian2D(img, window_size::Int = 5, step_size::Int = 1, threshold::Float64 = (7/2)/255)
+    """
+    Computes the sum-modified Laplacian for each dimension separately.
+
+        window_size sets the full size of the examined pixel neighborhood
+
+        step_size and threshold are described in the shape from focus literature
+        that originally proposed the SML.
+        Nayar, S. K., & Nakagawa, Y. (1994). Shape from Focus. IEEE Transactions on Pattern Analysis and Machine Intelligence, 16(8), 824–831. https://doi.org/10.1109/34.308479
+    """
+
 
     # NOTE: Has hard coded parameters!!!
     # window_size::Int = 5
@@ -287,16 +369,17 @@ function SumModifiedLaplacian2D(img, window_size::Int = 5, step_size::Int = 1, t
 
 end
 
-function PlotGaussian(σ=1, l=3)
+
+function PlotGaussian(sigma=1, l=3)
     """
-    Takes in σ as standard deviation of desired Gaussian function and l as length of kernel (must be odd) and uses Images.KernelFactors to create x and y vectors that can be used to plot a 1-dimensional Gaussian function.
+    Takes in sigma as standard deviation of desired Gaussian function and l as length of kernel (must be odd) and uses Images.KernelFactors to create x and y vectors that can be used to plot a 1-dimensional Gaussian function.
 
     This is intended to be used for creating a variably sized image kernel.
 
     TODO: Rename more appropriately
     """
 
-    y = collect( KernelFactors.gaussian(σ, l) )
+    y = collect( KernelFactors.gaussian(sigma, l) )
     x = collect( range( -floor(l/2), length=length(y) ) )
 
     return x, y
@@ -324,10 +407,11 @@ function FilterNaNs(inputArray, replacementValue=0)
     return outputArray
 end
 
-
 ## Image conversion functions
 
+
 function Gray2Float64(img) convert(Array{Float64}, Gray.(img)) end
+
 
 function RGB2Float64(img)
     
@@ -345,16 +429,18 @@ function RGB2Float64(img)
     return imgOut
 end
 
+
 ## Visualiation / Normalization functions
 
-# function imageDisp01(img) img.+abs(minimum(img)) end
+
 function imageDisp01(img); (img.-minimum(img))/(maximum(img)-minimum(img)) end
+
 
 function shiftNormalsRange(img) imageNormalize(imageDisp01(img)) end
 
+
 function imageNormalize(img) img./maximum(img) end
 
-function brightnessNormalize(img) img./(mean(img)) end
 
 function imageCenterValues(img)
 
@@ -368,3 +454,6 @@ function imageCenterValues(img)
 
     return (img.+imgAdjustFactor)/(2*imgAdjustFactor)
 end
+
+
+function PermutedRGB2Colorview(img) colorview(RGB, img[:,:,1], img[:,:,2], img[:,:,2]) end
