@@ -3,7 +3,7 @@ using Glob, CSV, DataFrames, CoordinateTransformations, LinearAlgebra, ProgressM
 
 include("./sff.jl")
 include("./IlluminationInvariance.jl")
-include("./ImageUtilities.jl")
+include("../misc/ImageUtilities.jl")
 
 global ACCEPTED_METHODS = ["fvg", "mean", "max"]
 global ACCEPTED_KERNELS = ["sml", "sobel"]
@@ -231,7 +231,7 @@ function sff_rti(baseFolder, innerFolderList::Array{String}, methodList::Array{S
                     gradientList, zPosList, psnrDictCurrent = ComputeMultiLightGradients(baseFolder*f, method, kernel; ksize=(ksize,ksize), write_maps=write_maps, compute_psnr=compute_psnr)
 
                     # Compute SFF
-                    Z = sff(gradientList, zPosList; sampleStep=2, median=true)
+                    Z, R = sff(gradientList, zPosList; sampleStep=2, median=true)
 
                     psnrMean = 0.0
                     if compute_psnr
@@ -241,7 +241,7 @@ function sff_rti(baseFolder, innerFolderList::Array{String}, methodList::Array{S
                     numRTI, numSFF = ParseFolderName(f)
 
                     if outputFolder !== nothing
-                        push!(outputStructList, FileSet(Z,numRTI,numSFF,method,kernel))
+                        push!(outputStructList, FileSet(Z,R,numRTI,numSFF,method,kernel))
                     end
 
                     # Normalize computed depth map so that it's placed from 0-1
@@ -271,15 +271,17 @@ function sff_rti(baseFolder, innerFolderList::Array{String}, methodList::Array{S
         end
     end
 
-    if isnan(ZMax) 
-        ZMax = FindFileSetMax(outputStructList)
-    else
-        println("NOTE: Using given ZMax normalization coefficient")
-    end
+    # if isnan(ZMax) 
+    #     ZMax = FindFileSetMax(outputStructList)
+    # else
+    #     println("NOTE: Using given ZMax normalization coefficient")
+    # end
+
+    ZMax, RMax = FindFileSetMax(outputStructList)
 
     if write_maps == true
         for ksize in ksizeList
-            WriteMaps(outputStructList, outputFolder*string(ksize), ZMax)
+            WriteMaps(outputStructList, outputFolder*string(ksize), ZMax, RMax)
         end
     end
 
@@ -287,7 +289,7 @@ function sff_rti(baseFolder, innerFolderList::Array{String}, methodList::Array{S
         # csvPath = @printf("%s/Ground truth comparison results (%i,%i).csv", outputFolder, ksize[1], ksize[2])
         csvPath = outputFolder * "/Ground truth comparison results.csv"
 
-        WriteCSV(csvPath, innerFolderList, methodList, kernelList, ksizeList, structureDict, msssimDict, psnrDict, ZMax)
+        WriteCSV(csvPath, innerFolderList, methodList, kernelList, ksizeList, structureDict, msssimDict, psnrDict, ZMax, RMax)
     end
 
 end

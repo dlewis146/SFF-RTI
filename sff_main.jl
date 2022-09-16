@@ -1,7 +1,7 @@
 using LinearAlgebra, Glob, Images, ImageView, CSV, DataFrames, Printf
 include("./sff.jl")
 include("./sff-rti_utilities.jl")
-include("./ImageUtilities.jl")
+include("../misc/ImageUtilities.jl")
 
 global ACCEPTED_KERNELS = ["sml", "sobel"]
 
@@ -69,8 +69,10 @@ if abspath(PROGRAM_FILE) == @__FILE__
 
     innerFolderList = ["100"]
     kernelList = ["sml"]
+    ksizeList = [5]
 
-    outputFolder = "J:/Image Out/Restrained Z/Window Size Tests/(5,5)/"
+    outputFolder = "J:/Image Out/R TEST/"
+    # outputFolder = "J:/Image Out/Restrained Z/Window Size Tests/(5,5)/"
 
     # Create empty dictionaries to gather MS-SIM, MS-SSIM (Just structure) and PSNR 
     msssimDict = Dict()
@@ -86,48 +88,54 @@ if abspath(PROGRAM_FILE) == @__FILE__
     outputStructList = []
 
     for f in innerFolderList
-        for kernel in kernelList
+        for ksize in ksizeList
+            for kernel in kernelList
 
-            println("Running ", kernel, " for ", f)
+                println("Running ", kernel, " for ", f)
 
-            # Run SFF method
-            Z = sff_main(base*f, kernel; ksize=(5,5), outputFolder=outputFolder, write_maps=true)
+                # Run SFF method
+                Z, R = sff_main(base*f, kernel; ksize=(ksize, ksize), outputFolder=outputFolder, write_maps=false)
 
-            if outputFolder !== nothing
-                push!(outputStructList, FileSet(Z,0,parse(Int,f),"SFF",kernel))
+                if outputFolder !== nothing
+                    push!(outputStructList, FileSet(Z,R,0,parse(Int,f),"SFF",kernel))
+                end
+
+                # Normalize computed depth map so that it's placed from 0-1
+                # Z_normalized = imageDisp01(Z)
+                Z_normalized = complement.(imageDisp01(Z))
+
+                if compute_ssim
+                    # Compute SSIM and MS-SSIM then store all statistical measures in appropriate dictionaries
+                    # TEMP: Trying to compute MS-SSIM and MS-SSIM with just structural comparison taken into account
+                    """
+                    Here, the first parameter is the kernel used to weight the neighbourhood of each pixel while calculating the SSIM locally, and defaults to KernelFactors.gaussian(1.5, 11). The second parameter is the set of weights (α, β, γ) given to the lunimance (L), contrast (C) and structure (S) terms while calculating the SSIM, and defaults to (1.0, 1.0, 1.0). Recall that SSIM is defined as Lᵅ × Cᵝ × Sᵞ.
+                    Source: https://juliaimages.org/stable/examples/image_quality_and_benchmarks/structural_similarity_index/
+                    """
+
+                    iqi = MSSSIM(KernelFactors.gaussian(1.5,11), (0.0,0.0,1.0))
+                    structureDict[f,"sff",kernel] = assess(iqi, GT, Z_normalized)
+
+                    # ssimDict[f,"sff",kernel, ksize]  = assess_ssim(GT, Z_normalized)
+                    msssimDict[f,"sff",kernel, ksize]  = assess_msssim(GT, Z_normalized)
+                elseif !compute_ssim
+                    structureDict[f,"sff",kernel, ksize] = NaN
+                    msssimDict[f,"sff",kernel, ksize] = NaN
+                end
+
+                # Not computing PSNR for SFF collections, but we create dummy entries for compatibility with `WriteCSV`
+                psnrDict[f,"sff",kernel, ksize] = NaN
             end
-
-            # Normalize computed depth map so that it's placed from 0-1
-            # Z_normalized = imageDisp01(Z)
-            Z_normalized = complement.(imageDisp01(Z))
-
-            if compute_ssim
-                # Compute SSIM and MS-SSIM then store all statistical measures in appropriate dictionaries
-                # TEMP: Trying to compute MS-SSIM and MS-SSIM with just structural comparison taken into account
-                """
-                Here, the first parameter is the kernel used to weight the neighbourhood of each pixel while calculating the SSIM locally, and defaults to KernelFactors.gaussian(1.5, 11). The second parameter is the set of weights (α, β, γ) given to the lunimance (L), contrast (C) and structure (S) terms while calculating the SSIM, and defaults to (1.0, 1.0, 1.0). Recall that SSIM is defined as Lᵅ × Cᵝ × Sᵞ.
-                Source: https://juliaimages.org/stable/examples/image_quality_and_benchmarks/structural_similarity_index/
-                """
-
-                iqi = MSSSIM(KernelFactors.gaussian(1.5,11), (0.0,0.0,1.0))
-                structureDict[f,"sff",kernel] = assess(iqi, GT, Z_normalized)
-
-                # ssim[f,method,kernel]  = assess_ssim(GT, Z_normalized)
-                msssimDict[f,"sff",kernel]  = assess_msssim(GT, Z_normalized)
-            elseif !compute_ssim
-                structureDict[f,"sff",kernel] = NaN
-                msssimDict[f,"sff",kernel] = NaN
-            end
-            psnrDict[f,"sff",kernel] = NaN
         end
     end
 
-    ZMax = FindFileSetMax(outputStructList)
+    ZMax, RMax = FindFileSetMax(outputStructList)
 
     if outputFolder !== nothing
-        WriteMaps(outputStructList, outputFolder, nothing)
+        for ksize in ksizeList
+            WriteMaps(outputStructList, outputFolder*string(ksize), nothing, nothing)
+        end
     end
 
-    WriteCSV(outputFolder*"/Ground truth comparison results SFF (5,5).csv", innerFolderList, ["sff"], kernelList, structureDict, msssimDict, ZMax, psnrDict)
+    WriteCSV(outputFolder*"/Ground truth comparison results SFF (5,5).csv", innerFolderList, ["sff"], kernelList, [5], structureDict, msssimDict, psnrDict, ZMax, RMax)
 
 end

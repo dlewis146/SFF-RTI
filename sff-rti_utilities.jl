@@ -1,5 +1,6 @@
 struct FileSet
     Z::Array{Float64}
+    R::Array{Float64}
     numRTI::Int
     numSFF::Int
     method::String
@@ -10,30 +11,41 @@ function FixPathEnding(f)  if last(f) !== '/' && last(f) !== '\\'; return f*"/" 
 
 function FindFileSetMax(structList)
     """
-    Takes in list of FileSet structs and returns global maximum for Z. 
-    Used for determining global normalization value.
+    Takes in list of FileSet structs and returns global maximums for Z and R. 
+    Used for determining global normalization values.
     """
     zMaxGlobal = 0.0
+    rMaxGlobal = 0.0
 
     for s in structList
         zMaxLocal = maximum(s.Z)
+        rMaxLocal = maximum(s.R)
+
         if zMaxLocal > zMaxGlobal
             zMaxGlobal = zMaxLocal
         end
+
+        if rMaxLocal > rMaxGlobal
+            rMaxGlobal = rMaxLocal
+        end
     end
 
-    return zMaxGlobal
+    return zMaxGlobal, rMaxGlobal
 end
 
-function WriteMaps(structList, outputFolder, ZMax=nothing)
+function WriteMaps(structList, outputFolder, ZMax=nothing, RMax=nothing)
     """
     Takes in list of FileSet structs and an output folder path. Finds global normalization values for 
     depth maps (Z) in structList and then writes them out (along with computed surface normals) in appropriate folders inside of outputBase.
     """
         
-    # Get new ZMax if not given
-    if ZMax === nothing
-        ZMax = FindFileSetMax(structList)
+    # Get new ZMax and/or RMax if not given
+    if     ZMax === nothing && RMax !== nothing
+        ZMax, _ = FindFileSetMax(structList)
+    elseif ZMax !== nothing && RMax === nothing
+        _, RMax = FindFileSetMax(structList)
+    elseif ZMax === nothing && RMax === nothing
+        ZMax, RMax = FindFileSetMax(structList)
     end
 
     for s in structList
@@ -52,12 +64,14 @@ function WriteMaps(structList, outputFolder, ZMax=nothing)
         ispath(outputFolderConcatenated) || mkpath(outputFolderConcatenated)
 
         save(outputFolderConcatenated*"/Z_"*folderName*"_"*s.method*"_"*s.kernel*".tif", s.Z/ZMax)
+        # save(outputFolderConcatenated*"/R_"*folderName*"_"*s.method*"_"*s.kernel*".tif", s.R)
+        save(outputFolderConcatenated*"/R_"*folderName*"_"*s.method*"_"*s.kernel*".tif", s.R/RMax)
         save(outputFolderConcatenated*"/Znorm_"*folderName*"_"*s.method*"_"*s.kernel*".tif", imageDisp01(s.Z))
         save(outputFolderConcatenated*"/normals_"*folderName*"_"*s.method*"_"*s.kernel*".png", normalsColor)
     end
 end
 
-function WriteCSV(outputPath::String, folderList::Array{String}, methodList::Array{String}, kernelList::Array{String}, ksizeList::Array{Int}, ssimDict::Dict, msssimDict::Dict, psnrDict::Dict, ZMax::Float64)
+function WriteCSV(outputPath::String, folderList::Array{String}, methodList::Array{String}, kernelList::Array{String}, ksizeList::Array{Int}, ssimDict::Dict, msssimDict::Dict, psnrDict::Dict, ZMax::Float64, RMax::Float64)
 
     # Write out comparison results
     println("Writing results to text file...")
@@ -83,7 +97,7 @@ function WriteCSV(outputPath::String, folderList::Array{String}, methodList::Arr
 
                     for kernel in kernelList
                         # Create and write line to CSV
-                        lineOut = string(numRTI, ",", numSFF, ",", method, ",", kernel, ",", ssimDict[f,method,kernel,ksize], ",", msssimDict[f,method,kernel,ksize], ",", psnrDict[f,method,kernel,ksize], ",", ksize, ",", ZMax, "\n")
+                        lineOut = string(numRTI, ",", numSFF, ",", method, ",", kernel, ",", ssimDict[f,method,kernel,ksize], ",", msssimDict[f,method,kernel,ksize], ",", psnrDict[f,method,kernel,ksize], ",", ksize, ",", ZMax, ",", RMax, "\n")
                         write(io, lineOut)
                     end
             
