@@ -22,7 +22,7 @@ function ShapeFromFocus(folder_path, theta, phi, method="illumination", configPa
     numCols = size(load(file_list[1]))[1]
     numRows = size(load(file_list[1]))[2]
 
-    if configPath != nothing
+    if configPath !== nothing
         println("Reading .acq file...")
         # Parse .acq file
         # acqTuple = ReadAcqFile(configPath)

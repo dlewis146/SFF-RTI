@@ -136,6 +136,5 @@ if abspath(PROGRAM_FILE) == @__FILE__
         end
     end
 
-    WriteCSV(outputFolder*"/Ground truth comparison results SFF (5,5).csv", innerFolderList, ["sff"], kernelList, [5], structureDict, msssimDict, psnrDict, ZMax, RMax)
 
 end

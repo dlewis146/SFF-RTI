@@ -1,5 +1,5 @@
 # using Images
-using Glob, CSV, DataFrames, CoordinateTransformations, LinearAlgebra, ProgressMeter, Printf
+using Glob, CSV, DataFrames, CoordinateTransformations, ProgressMeter, Printf
 
 include("./sff.jl")
 include("./IlluminationInvariance.jl")

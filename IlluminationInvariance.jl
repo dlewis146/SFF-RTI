@@ -1,3 +1,5 @@
+using LinearAlgebra
+
 struct LightAngle
     """
     Structure for containing X,Y,Z coordinates of lamps.
