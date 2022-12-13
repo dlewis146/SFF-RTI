@@ -75,7 +75,7 @@ function GaussianInterpolation3Pt(x, imageStack, Gstep=2)
     # Find maximum value along Z dimension for each pixel
     coordsMax = argmax(imageStack, dims=3)
 
-    idxMax = zeros(Int8, M, N)
+    idxMax::Array{Int} = zeros(M, N)
     for idx in eachindex(coordsMax) idxMax[idx] = Int(coordsMax[idx][3]) end
 
     # Push Z values away from edges of focus stack
@@ -87,9 +87,9 @@ function GaussianInterpolation3Pt(x, imageStack, Gstep=2)
     # make sure we're not going to try and access a point outside of our scope
     # idxMaxPadded = padarray(idxMax, Pad(:replicate, Gstep, Gstep))
 
-    interpolatedD = zeros(Float64, M, N)
-    peakF = zeros(Float64, M, N)
-    sigmaFOut = zeros(Float64, M, N)
+    interpolatedD::Array{Float64} = zeros(M, N)
+    peakF::Array{Float64} = zeros(M, N)
+    sigmaFOut::Array{Float64} = zeros(M, N)
 
     # For each pixel, interpolate Gaussian over three images in determined peak region
     for i in range(1, stop=M)

@@ -1,7 +1,8 @@
-# using Images
-using Glob, CSV, DataFrames, CoordinateTransformations, ProgressMeter, Printf
+using Images
+using Glob, CSV, DataFrames, CoordinateTransformations, LinearAlgebra, ProgressMeter, Printf
 
 include("./sff.jl")
+include("./sff-rti_utilities.jl")
 include("./IlluminationInvariance.jl")
 include("../misc/ImageUtilities.jl")
 
@@ -85,7 +86,7 @@ function ComputeMultiLightGradients(baseFolder::String, method::String, kernel::
     zPosList = sort(unique([row.z_cam for row in CSV.File(csvPath; select=["z_cam"])]), rev=true)
     println("NOTE: Reversing zPosList")
 
-    println("NOTE: Adding constant of 10 to x_lamp,y_lamp,z_lamp in attempt to keep all values about 0")
+    println("NOTE: Adding constant of 10 to x_lamp,y_lamp,z_lamp in attempt to keep all values above 0")
 
     gradientList = []
     global offsetAmount = 0
@@ -102,8 +103,8 @@ function ComputeMultiLightGradients(baseFolder::String, method::String, kernel::
 
     # Compute photometric-invariant image representation for each Z position
     for idx in eachindex(zPosList)
-        angleList = []
-        fileList = []
+        angleList = Vector{LightAngle}(undef, 0)
+        fileList = Vector{String}(undef, 0)
 
         # Use CSV to generate filelist and angle objects.
         for row in rowList
@@ -191,7 +192,7 @@ function ComputeMultiLightGradients(baseFolder::String, method::String, kernel::
 
 end
 
-function sff_rti(baseFolder, innerFolderList::Array{String}, methodList::Array{String}, kernelList::Array{String}; ksizeList=[3], write_maps=false, write_csv=false, compute_psnr=false, compute_ssim=false, outputFolder="", gtPath="", ZMax=NaN)
+function sff_rti(baseFolder, innerFolderList::Vector{String}, methodList::Vector{String}, kernelList::Vector{String}; ksizeList=[3], write_maps=false, write_csv=false, compute_psnr=false, compute_ssim=false, outputFolder="", gtPath="", ZMax=NaN)
     """
     Function that takes in a folder which contains a subfolder of simulated images and a CSV corresponding to the RTI and SFF parameters for those images. Multi-light integration methods are applied for each focus position (full vector gradient, mean gradient reponse, or maximum gradient response) and then are all passed into a Shape from Focus function to generate a depth map.
 
@@ -227,7 +228,7 @@ function sff_rti(baseFolder, innerFolderList::Array{String}, methodList::Array{S
                     kernel = lowercase(kernel)
 
                     # Call function to compute multi-light gradients using desired method
-                    gradientList, zPosList, psnrDictCurrent = ComputeMultiLightGradients(baseFolder*f, method, kernel; ksize=(ksize,ksize), write_maps=write_maps, compute_psnr=compute_psnr)
+                    gradientList, zPosList, psnrDictCurrent = ComputeMultiLightGradients(baseFolder*f, method, kernel; ksize=ksize, write_maps=write_maps, compute_psnr=compute_psnr)
 
                     # Compute SFF
                     Z, R = sff(gradientList, zPosList; sampleStep=2, median=true)
@@ -278,11 +279,11 @@ function sff_rti(baseFolder, innerFolderList::Array{String}, methodList::Array{S
 
     ZMax, RMax = FindFileSetMax(outputStructList)
 
-    if write_maps == true
-        for ksize in ksizeList
-            WriteMaps(outputStructList, outputFolder*string(ksize), ZMax, RMax)
-        end
+    # if write_maps == true
+    for ksize in ksizeList
+        WriteMaps(outputStructList, outputFolder*string(ksize), ZMax, RMax)
     end
+    # end
 
     if write_csv == true
         # csvPath = @printf("%s/Ground truth comparison results (%i,%i).csv", outputFolder, ksize[1], ksize[2])
