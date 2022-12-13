@@ -46,8 +46,6 @@ function sff(imageList, focusList; sampleStep=2, median=true)
         z = mapwindow(median!, z, (3,3))
     end
 
-
-
     errorArray = zeros(M,N)
     for p in range(1, stop=P)
         errorArray = errorArray .+ abs.(  imageStack[:,:,p] - A.*exp.( ( -(focusList[p].-z).^2 ./ (2*sigmaF.^2) ) ))
@@ -61,7 +59,7 @@ function sff(imageList, focusList; sampleStep=2, median=true)
 
     # Filter out NaNs from R
     R = FilterNaNs(R)
-    
+
     # Clip any negative values from r
     R[R .< 0] .= 0
 
@@ -76,7 +74,7 @@ function GaussianInterpolation3Pt(x, imageStack, Gstep=2)
 
     # Find maximum value along Z dimension for each pixel
     coordsMax = argmax(imageStack, dims=3)
-    
+
     idxMax = zeros(Int8, M, N)
     for idx in eachindex(coordsMax) idxMax[idx] = Int(coordsMax[idx][3]) end
 
@@ -92,7 +90,7 @@ function GaussianInterpolation3Pt(x, imageStack, Gstep=2)
     interpolatedD = zeros(Float64, M, N)
     peakF = zeros(Float64, M, N)
     sigmaFOut = zeros(Float64, M, N)
-    
+
     # For each pixel, interpolate Gaussian over three images in determined peak region
     for i in range(1, stop=M)
         for j in range(1, stop=N)

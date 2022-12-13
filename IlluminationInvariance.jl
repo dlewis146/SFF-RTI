@@ -28,7 +28,7 @@ function(lp::LightAngle)()
 end
 
 
-function ComputeFullVectorGradient(file_list, angle_list, kernel::String="sobel", ksize::Tuple{Int,Int}=(3,3))
+function ComputeFullVectorGradient(file_list, angle_list, kernel::String="sml", ksize::Int=5)
     """
     Takes in a list of image filepaths as well as a list of LightAngle 
     objects (correlated with images by stored order). Returns a single
@@ -48,6 +48,7 @@ function ComputeFullVectorGradient(file_list, angle_list, kernel::String="sobel"
     for i in range(1, stop=numImages)
 
         # Read Cartesian coordinates from respective input object (assume degrees) and place in vector, rounding to 5 digits
+        ## NOTE: Rounding to 5 digits due to conversion issues. For some reason, there were sometimes trailing digits that caused two identical angles converted into spherical coordinates to be different.
         vec1 = vec([round(angle_list[i].x; digits=5),
                     round(angle_list[i].y; digits=5),
                     round(angle_list[i].z; digits=5)

@@ -71,6 +71,68 @@ function WriteMaps(structList, outputFolder, ZMax=nothing, RMax=nothing)
     end
 end
 
+
+function WriteMapSingle(Z, R, numRTI, numSFF, method, kernel, ksize, outputFolder)
+    """
+    for SFF-RTI
+    """
+
+    RMax = maximum(R)
+    ZMax = maximum(Z)
+
+    folderName = "RTI_"*string(numRTI)*"_SFF_"*string(numSFF)
+
+    normals = Depth2Normal(Z)
+
+    normalsX = shiftNormalsRange(normals[:,:,1])
+    normalsY = shiftNormalsRange(normals[:,:,2])
+    normalsZ = shiftNormalsRange(normals[:,:,3])
+    normalsColor = colorview(RGB, normalsX, normalsY, normalsZ)
+
+    outputFolder = FixPathEnding(outputFolder)
+
+
+    outputFolderConcatenated = outputFolder*"/"*uppercase(method)*" "*uppercase(kernel)*"/"
+    ispath(outputFolderConcatenated) || mkpath(outputFolderConcatenated)
+
+    save(outputFolderConcatenated*"/Z_"*folderName*"_"*method*"_"*kernel*"_"*string(ksize)*".png", Z/ZMax)
+    # save(outputFolderConcatenated*"/R_"*folderName*"_"*s.method*"_"*s.kernel*".tif", s.R)
+    save(outputFolderConcatenated*"/R_"*folderName*"_"*method*"_"*kernel*"_"*string(ksize)*".png", R/RMax)
+    save(outputFolderConcatenated*"/Znorm_"*folderName*"_"*method*"_"*kernel*"_"*string(ksize)*".png", imageDisp01(Z))
+    save(outputFolderConcatenated*"/normals_"*folderName*"_"*method*"_"*kernel*"_"*string(ksize)*".png", normalsColor)
+
+end
+function WriteMapSingle(Z, R, numSFF, kernel, ksize, outputFolder)
+    """
+    for SFF
+    """
+
+    RMax = maximum(R)
+    ZMax = maximum(Z)
+
+    folderName = "SFF_"*string(numSFF)
+
+    normals = Depth2Normal(Z)
+
+    normalsX = shiftNormalsRange(normals[:,:,1])
+    normalsY = shiftNormalsRange(normals[:,:,2])
+    normalsZ = shiftNormalsRange(normals[:,:,3])
+    normalsColor = colorview(RGB, normalsX, normalsY, normalsZ)
+
+    outputFolder = FixPathEnding(outputFolder)
+
+
+    outputFolderConcatenated = outputFolder*"/"*uppercase(kernel)*"/"
+    ispath(outputFolderConcatenated) || mkpath(outputFolderConcatenated)
+
+    save(outputFolderConcatenated*"/Z_"*folderName*"_"*kernel*"_"*string(ksize)*".png", Z/ZMax)
+    # save(outputFolderConcatenated*"/R_"*folderName*"_"*s.method*"_"*s.kernel*".tif", s.R)
+    save(outputFolderConcatenated*"/R_"*folderName*"_"*kernel*"_"*string(ksize)*".png", R/RMax)
+    save(outputFolderConcatenated*"/Znorm_"*folderName*"_"*kernel*"_"*string(ksize)*".png", imageDisp01(Z))
+    save(outputFolderConcatenated*"/normals_"*folderName*"_"*kernel*"_"*string(ksize)*".png", normalsColor)
+
+end
+
 function WriteCSV(outputPath::String, folderList::Array{String}, methodList::Array{String}, kernelList::Array{String}, ksizeList::Array{Int}, ssimDict::Dict, msssimDict::Dict, psnrDict::Dict, ZMax::Float64, RMax::Float64)
 
     # Write out comparison results
@@ -78,7 +140,7 @@ function WriteCSV(outputPath::String, folderList::Array{String}, methodList::Arr
     open(outputPath, "w") do io
 
         # Write header
-        write(io, "numRTI,numSFF,method,kernel,ms-ssim (just structure),ms-ssim,average psnr,ksize,Z normalization coefficient\n")
+        write(io, "numRTI,numSFF,method,kernel,ms-ssim (just structure),ms-ssim,average psnr,ksize,Z normalization coefficient,R normalization coefficient\n")
 
         for f in folderList
             for method in methodList
@@ -98,6 +160,44 @@ function WriteCSV(outputPath::String, folderList::Array{String}, methodList::Arr
                     for kernel in kernelList
                         # Create and write line to CSV
                         lineOut = string(numRTI, ",", numSFF, ",", method, ",", kernel, ",", ssimDict[f,method,kernel,ksize], ",", msssimDict[f,method,kernel,ksize], ",", psnrDict[f,method,kernel,ksize], ",", ksize, ",", ZMax, ",", RMax, "\n")
+                        write(io, lineOut)
+                    end
+            
+                end
+            end
+        end
+    end
+end
+
+
+function WriteCSVSingles(outputPath::String, folderList::Array{String}, methodList::Array{String}, kernelList::Array{String}, ksizeList::Array{Int}, ssimDict::Dict, msssimDict::Dict, psnrDict::Dict, ZMaxDict::Dict, RMaxDict::Dict)
+
+    # Write out comparison results
+    println("Writing results to text file...")
+    open(outputPath, "w") do io
+
+        # Write header
+        write(io, "numRTI,numSFF,method,kernel,ms-ssim (just structure),ms-ssim,average psnr,ksize,Z normalization coefficient,R normalization coefficient\n")
+
+        for f in folderList
+            for method in methodList
+                for ksize in ksizeList
+
+                    # Parse inputs for proper number of RTI and SFF based on method used
+                    numRTI = 0
+                    numSFF = 0
+
+                    if lowercase(method) == "sff"
+                        numRTI = 0
+                        numSFF = parse(Int64, f)
+                    elseif lowercase(method) != "sff"
+                        numRTI, numSFF = ParseFolderName(f)
+                    end
+
+                    for kernel in kernelList
+
+                        # Create and write line to CSV
+                        lineOut = string(numRTI, ",", numSFF, ",", method, ",", kernel, ",", ssimDict[f,method,kernel,ksize], ",", msssimDict[f,method,kernel,ksize], ",", psnrDict[f,method,kernel,ksize], ",", ksize, ",", ZMaxDict[f,method,kernel,ksize], ",", RMaxDict[f,method,kernel,ksize], "\n")
                         write(io, lineOut)
                     end
             
