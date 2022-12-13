@@ -102,9 +102,9 @@ function sff_handler(folderPath, kernelList, ksizeList; write_maps=false, output
                 # push!(outputStructList, FileSet(Z,R,0,parse(Int,f),"SFF",kernel))
             end
 
-                # Normalize computed depth map so that it's placed from 0-1
-                # Z_normalized = imageDisp01(Z)
-                Z_normalized = complement.(imageDisp01(Z))
+            # Normalize computed depth map so that it's placed from 0-1
+            Z_normalized = imageDisp01(Z)
+            # Z_normalized = complement.(imageDisp01(Z))
 
             if compute_ssim
                 # Compute SSIM and MS-SSIM then store all statistical measures in appropriate dictionaries
