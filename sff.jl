@@ -2,6 +2,8 @@ using LinearAlgebra
 
 function sff(imageList, focusList; sampleStep=2, median=true)
     """
+    Takes in list of images already processed using a focus measure operator as well as a corresponding list of focus distances / depth levels
+
     Shape from Focus algorithm originally programmed in Matlab by Said Pertuz
 
     https://www.mathworks.com/matlabcentral/fileexchange/55103-shape-from-focus
@@ -24,7 +26,7 @@ function sff(imageList, focusList; sampleStep=2, median=true)
     end
 
     # Estimate depth map
-    YMax, z = GaussianInterpolation3Pt(focusList, imageStack, sampleStep)
+    YMax, z, A, sigmaF = GaussianInterpolation3Pt(focusList, imageStack, sampleStep)
 
     # NOTE:Casting YMax to Int for use as indices
     Ic = round.(Int, YMax)
@@ -46,7 +48,24 @@ function sff(imageList, focusList; sampleStep=2, median=true)
         z = mapwindow(median!, z, (3,3))
     end
 
-    return z
+    errorArray = zeros(M,N)
+    for p in range(1, stop=P)
+        errorArray = errorArray .+ abs.(  imageStack[:,:,p] - A.*exp.( ( -(focusList[p].-z).^2 ./ (2*sigmaF.^2) ) ))
+    end
+
+    # Average
+    errorArray = errorArray / P
+    # errorArray = FilterImageAverage(errorArray, (5,5))
+
+    R = 20 * log10.((P*fmax)./errorArray)
+
+    # Filter out NaNs from R
+    R = FilterNaNs(R)
+
+    # Clip any negative values from r
+    R[R .< 0] .= 0
+
+    return z, R
 
 end
 
@@ -57,8 +76,8 @@ function GaussianInterpolation3Pt(x, imageStack, Gstep=2)
 
     # Find maximum value along Z dimension for each pixel
     coordsMax = argmax(imageStack, dims=3)
-    
-    idxMax = zeros(Int8, M, N)
+
+    idxMax::Array{Int} = zeros(M, N)
     for idx in eachindex(coordsMax) idxMax[idx] = Int(coordsMax[idx][3]) end
 
     # Push Z values away from edges of focus stack
@@ -70,9 +89,10 @@ function GaussianInterpolation3Pt(x, imageStack, Gstep=2)
     # make sure we're not going to try and access a point outside of our scope
     # idxMaxPadded = padarray(idxMax, Pad(:replicate, Gstep, Gstep))
 
-    interpolatedD = zeros(Float64, M, N)
-    # interpolatedF = zeros(Float64, M, N)
-    
+    interpolatedD::Array{Float64} = zeros(M, N)
+    peakF::Array{Float64} = zeros(M, N)
+    sigmaFOut::Array{Float64} = zeros(M, N)
+
     # For each pixel, interpolate Gaussian over three images in determined peak region
     for i in range(1, stop=M)
         for j in range(1, stop=N)
@@ -89,17 +109,23 @@ function GaussianInterpolation3Pt(x, imageStack, Gstep=2)
             xHigh = x[z+Gstep]
 
             # Compute Gaussian distribution parameters
+
+            ## Mean
             dBar = (( (log(yMid) - log(yHigh)) * (xMid^2 - xLow^2) ) / (2*(xMid-xLow) * ((log(yMid) - log(yLow)) + (log(yMid) - log(yHigh))) )) - (((log(yMid) - log(yLow)) * (xMid^2 - xHigh^2)) / (2*(xMid-xLow) * ((log(yMid) - log(yLow)) + (log(yMid) - log(yHigh)))))
 
-            # sigmaF = -(((xMid^2 - xLow^2) + (xMid^2 - xHigh^2) ) / (2 * ( (log(yMid) - log(yLow)) + (log(yMid) - log(yHigh)))))
+            ## Standard Deviation (Squared)
+            sigmaF2 = -(((xMid^2 - xLow^2) + (xMid^2 - xHigh^2) ) / (2 * ( (log(yMid) - log(yLow)) + (log(yMid) - log(yHigh)))))
+
+            sigmaF = real(sqrt(complex(sigmaF2)))
 
             # Interpolate focus value and place focus and depth values in respective maps
-            # interpolatedF[i,j] = ( yMid / ( exp( (-1/2) * (((xMid-dBar)/sigmaF)^2) ) ) )
+            peakF[i,j] = ( yMid / ( exp( (-1/2) * (((xMid-dBar)/sigmaF)^2) ) ) )
             interpolatedD[i,j] = dBar
+            sigmaFOut[i,j] = sigmaF
         end
     end
 
-    return idxMax, interpolatedD
+    return idxMax, interpolatedD, peakF, sigmaFOut
 end
 
 

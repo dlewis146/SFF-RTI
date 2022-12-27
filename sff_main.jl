@@ -1,11 +1,11 @@
-using LinearAlgebra, Glob, Images, ImageView, CSV, DataFrames, Printf
+using LinearAlgebra, Glob, Images, CSV, DataFrames, Printf
 include("./sff.jl")
 include("./sff-rti_utilities.jl")
-include("./ImageUtilities.jl")
+include("../misc/ImageUtilities.jl")
 
 global ACCEPTED_KERNELS = ["sml", "sobel"]
 
-function sff_main(baseFolder, kernel="sml"; ksize=(3,3), outputFolder=nothing, write_maps=false)
+function sff_main(baseFolder, kernel::String="sml"; ksize::Int=5, outputFolder::String=nothing, write_maps::Bool=false)
 
     # Make sure that given kernel is compatible with methods
     if !(kernel in ACCEPTED_KERNELS)
@@ -13,11 +13,12 @@ function sff_main(baseFolder, kernel="sml"; ksize=(3,3), outputFolder=nothing, w
     end
 
     # Make sure there aren't multiple CSV files in the base path
-    if length(glob("*.csv", baseFolder)) > 1
-        error("\nMore than 1 CSV file found in given folder\n")
-    end
+    # if length(glob("*.csv", baseFolder)) > 1
+    #     error("\nMore than 1 CSV file found in given folder\n")
+    # end
 
-    csvPath = glob("*.csv", baseFolder)[1]
+    csvPath = baseFolder*"/Image.csv"
+    # csvPath = glob("*.csv", baseFolder)[1]
 
     # Get all interesting files
     folderPath = baseFolder*"/Renders/"
@@ -58,49 +59,52 @@ function sff_main(baseFolder, kernel="sml"; ksize=(3,3), outputFolder=nothing, w
     # NOTE: Reversing focusList for consistency with SFF-RTI and GT where point closest to camera is lowest pixel value and further is highest value
     focusList = sort([row.z_cam for row in focusList], rev=true)
 
-    Z = sff(imageList, focusList; sampleStep=2, median=true)
+    Z, R = sff(imageList, focusList; sampleStep=2, median=true)
 
-    return Z
+    return Z, R
 end
 
-function sff_handler()
-    base = "J:/Research/Generated Data/Blender/Statue du parc d'Austerlitz/SFF/"
-    # base = "J:/Research/Generated Data/Blender/Statue du parc d'Austerlitz/SFF/Restrained Z/"
+function sff_handler(folderPath, kernelList, ksizeList; write_maps=false, outputFolder="", compute_ssim=true, gtPath="", write_csv=true)
 
-    innerFolderList = ["5", "100"]
-    # kernelList = ["sml"]
-    kernelList = ["sobel", "sml"]
-
-    outputFolder = "J:/Image Out/Statue (5,5)/"
 
     # Create empty dictionaries to gather MS-SIM, MS-SSIM (Just structure) and PSNR
     msssimDict = Dict()
     structureDict = Dict()
     psnrDict = Dict()
 
-    compute_ssim = true
+    # Read in ground truth for SSIM comparison if needed
+    GT = nothing
 
-    # Read in ground truth depth map for comparison
-    # NOTE: Using RTI collection due to original GT collection having a different camera setup
-    GT = Gray2Float64(Gray.(load("J:/Research/Generated Data/Blender/Statue du parc d'Austerlitz/RTI/Black Background - FullScale/Depth/Image0001.png")))
+    if compute_ssim == true && isfile(gtPath)
+        GT = Gray2Float64(load(gtPath))
+    elseif compute_ssim == true && !(isfile(gtPath))
+        throw(ArgumentError("Ground truth image doesn't exist at given path:  $gtPath"))
+    end
 
-    outputStructList = []
+   outputStructList = []
+   ZMaxDict = Dict()
+   RMaxDict = Dict()
 
-    for f in innerFolderList
+    f = basename(folderPath)
+
+    for ksize in ksizeList
         for kernel in kernelList
 
-            println("Running ", kernel, " for ", f)
+            println("Running SFF with variables:\nfolder: $f\nkernel: $kernel\nksize: $ksize\n")
 
             # Run SFF method
-            Z = sff_main(base*f, kernel; ksize=(5,5), outputFolder=outputFolder, write_maps=true)
+            Z, R = sff_main(folderPath, kernel; ksize=ksize, outputFolder=outputFolder, write_maps=write_maps)
 
             if outputFolder !== nothing
-                push!(outputStructList, FileSet(Z,0,parse(Int,f),"SFF",kernel))
+                WriteMapSingle(Z, R, basename(f), kernel, ksize, outputFolder)
+                ZMaxDict[f,"sff",kernel,ksize] = maximum(Z)
+                RMaxDict[f,"sff",kernel,ksize] = maximum(R)
+                # push!(outputStructList, FileSet(Z,R,0,parse(Int,f),"SFF",kernel))
             end
 
             # Normalize computed depth map so that it's placed from 0-1
-            # Z_normalized = imageDisp01(Z)
-            Z_normalized = complement.(imageDisp01(Z))
+            Z_normalized = imageDisp01(Z)
+            # Z_normalized = complement.(imageDisp01(Z))
 
             if compute_ssim
                 # Compute SSIM and MS-SSIM then store all statistical measures in appropriate dictionaries
@@ -111,23 +115,34 @@ function sff_handler()
                 """
 
                 iqi = MSSSIM(KernelFactors.gaussian(1.5,11), (0.0,0.0,1.0))
-                structureDict[f,method,kernel] = assess(iqi, GT, Z_normalized)
+                structureDict[f,"sff",kernel, ksize] = assess(iqi, GT, Z_normalized)
 
-                # ssim[f,method,kernel]  = assess_ssim(GT, Z_normalized)
-                msssimDict[f,method,kernel]  = assess_msssim(GT, Z_normalized)
+                # ssimDict[f,"sff",kernel, ksize]  = assess_ssim(GT, Z_normalized)
+                msssimDict[f,"sff",kernel, ksize]  = assess_msssim(GT, Z_normalized)
             elseif !compute_ssim
-                structureDict[f,method,kernel] = NaN
-                msssimDict[f,method,kernel] = NaN
+                structureDict[f,"sff",kernel, ksize] = 0
+                msssimDict[f,"sff",kernel, ksize] = 0
             end
-            psnrDict[f,"sff",kernel] = NaN
+
+            # Not computing PSNR for SFF collections, but we create dummy entries for compatibility with `WriteCSV`
+            psnrDict[f,"sff",kernel, ksize] = 0
         end
     end
 
-    ZMax = FindFileSetMax(outputStructList)
+    # ZMax, RMax = FindFileSetMax(outputStructList)
 
-    if outputFolder !== nothing
-        WriteMaps(outputStructList, outputFolder, nothing)
+    # if outputFolder !== nothing
+    #     for ksize in ksizeList
+    #         WriteMaps(outputStructList, outputFolder*string(ksize), nothing, nothing)
+    #     end
+    # end
+
+    if write_csv == true
+        # csvPath = @printf("%s/Ground truth comparison results (%i,%i).csv", outputFolder, ksize[1], ksize[2])
+        csvPath = outputFolder * "/Ground truth comparison results.csv"
+
+        WriteCSVSingles(csvPath, [f], ["sff"], kernelList, ksizeList, structureDict, msssimDict, psnrDict, ZMaxDict, RMaxDict)
+        # WriteCSV(csvPath, [f], methodList, kernelList, ksizeList, structureDict, msssimDict, psnrDict, ZMax, RMax)
     end
 
-    WriteCSV(outputFolder*"/Ground truth comparison results SFF.csv", innerFolderList, ["sff"], kernelList, structureDict, msssimDict, ZMax, psnrDict)
 end

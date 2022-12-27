@@ -1,52 +1,50 @@
+using CoordinateTransformations
+
+"""
+Structure for containing X,Y,Z coordinates of lamps. Also computes and stores the θ and ϕ in spherical coordinates in radians.
+"""
 struct LightAngle
-    """
-    Structure for containing X,Y,Z coordinates of lamps.
-    """
+
     x::Float64
     y::Float64
     z::Float64
-end
+    θ::Float64
+    ϕ::Float64
 
-function(lp::LightAngle)()
+    function LightAngle(x::Float64, y::Float64, z::Float64)
     """
-    Functor for usage with LightAngle struct. Computes theta and phi angles in spherical coordinate system.
-    Example)
-        lp = LightAngle(5,5,5)
-        lp()
-
-        OR 
-
-        lp = LightAngle(5,5,5)()
-
+    Constructor for usage with LightAngle struct. Computes theta and phi angles in spherical coordinate system.
     """
-    sph = SphericalFromCartesian()([lp.x,lp.y,lp.z])
-    theta = sph.θ
-    phi = sph.ϕ
-    return [theta,phi]
+    sph = SphericalFromCartesian()([x,y,z])
+
+    return new(x, y, z, sph.θ, sph.ϕ)
+    end
 end
 
 
-function ComputeFullVectorGradient(file_list, angle_list, kernel="sobel", ksize::Tuple{Int,Int}=(3,3))
+function ComputeFullVectorGradient(file_list, angle_list, kernel::String="sml", ksize::Int=5)
     """
-    Takes in a list of image filepaths as well as a list of LightAngle 
+    Takes in a list of image filepaths as well as a list of LightAngle
     objects (correlated with images by stored order). Returns a single
     image representing the full vector gradient of the given image space.
     """
 
     # Read first image to get image size
-    numPixels = length(load(file_list[1]))
+    numPixels::Int = length(load(file_list[1]))
 
-    numImages = length(file_list)
+    numImages::Int = length(file_list)
 
     # Initialize empty arrays
-    G = zeros(numImages, numImages)
-    dPdX = zeros(numPixels, numImages)
-    dPdY = zeros(numPixels, numImages)
+    G::Array{Float64} = zeros(numImages, numImages)
+    dPdX::Array{Float64} = zeros(numPixels, numImages)
+    dPdY::Array{Float64} = zeros(numPixels, numImages)
+
+    ### TODO: Why am I rounding the light angle coordinates????
 
     for i in range(1, stop=numImages)
 
-        # Read Cartesian coordinates from respective input object (assume degrees) and place in vector, rounding to 5 digits
-        vec1 = vec([round(angle_list[i].x; digits=5),
+        # Read Cartesian coordinates from respective input object and place in vector, rounding to 5 digits
+        vec1::Vector{Float64} = vec([round(angle_list[i].x; digits=5),
                     round(angle_list[i].y; digits=5),
                     round(angle_list[i].z; digits=5)
                     ])
@@ -60,8 +58,8 @@ function ComputeFullVectorGradient(file_list, angle_list, kernel="sobel", ksize:
                 continue
             end
 
-            # Read Cartesian coordinates from respective input object (assume degrees) and place in vector, rounding to five digits
-            vec2 = vec([round(angle_list[j].x; digits=5),
+            # Read Cartesian coordinates from respective input object and place in vector, rounding to five digits
+            vec2::Vector{Float64} = vec([round(angle_list[j].x; digits=5),
                         round(angle_list[j].y; digits=5),
                         round(angle_list[j].z; digits=5)
                         ])
@@ -73,9 +71,9 @@ function ComputeFullVectorGradient(file_list, angle_list, kernel="sobel", ksize:
             if i == 1
 
                 # Compute focus maps for image in `file_list` at `j`
-                img = Gray.(load(file_list[j]))
+                # img = Gray.(load(file_list[j]))
 
-                imgX, imgY = FilterImageSeparate(img, kernel, ksize)
+                imgX, imgY = FilterImageSeparate(Gray.(load(file_list[j])), kernel, ksize)
 
                 # Flatten images with vec() and then copy to appropriate
                 # array rows
@@ -88,7 +86,7 @@ function ComputeFullVectorGradient(file_list, angle_list, kernel="sobel", ksize:
     ### Compute FVG
 
     # Create empty vector to hold respective results for each file/light position
-    results = zeros(size(load(file_list[1])))
+    results::Array{Float64} = zeros(size(load(file_list[1])))
 
     # Iterate through numImages (stored as either dimension of G)
     for idx in eachindex(results)
