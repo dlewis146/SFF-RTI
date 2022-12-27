@@ -195,12 +195,13 @@ function ComputeMultiLightGradients(baseFolder, method, kernel; ksize::Tuple{Int
 
 end
 
+
+"""
+Function that takes in a folder which contains a subfolder of simulated images and a CSV corresponding to the RTI and SFF parameters for those images. Multi-light integration methods are applied for each focus position (full vector gradient, mean gradient reponse, or maximum gradient response) and then are all passed into a Shape from Focus function to generate a depth map. 
+    
+Computation of MS-SSIM and PSNR are also possible for statistical comparison. The MS-SSIM requires the path to a ground truth depth map and the PSNR requires there to be an equivalent SFF acquisition (see `FindSFFEquivalent` called in the function `ComputeMultiLightGradients`).
+"""
 function sff_rti(baseFolder, innerFolderList::Array{String}, methodList::Array{String}, kernelList::Array{String}; ksizeList=[3], write_maps=false, write_csv=false, compute_psnr=false, compute_ssim=false, outputFolder="", gtPath="", ZMax=NaN)
-    """
-    Function that takes in a folder which contains a subfolder of simulated images and a CSV corresponding to the RTI and SFF parameters for those images. Multi-light integration methods are applied for each focus position (full vector gradient, mean gradient reponse, or maximum gradient response) and then are all passed into a Shape from Focus function to generate a depth map. 
-        
-    Computation of MS-SSIM and PSNR are also possible for statistical comparison. The MS-SSIM requires the path to a ground truth depth map and the PSNR requires there to be an equivalent SFF acquisition (see `FindSFFEquivalent` called in the function `ComputeMultiLightGradients`).
-    """
 
     # Read in ground truth for SSIM comparison if needed
     GT = nothing

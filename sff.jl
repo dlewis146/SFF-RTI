@@ -1,3 +1,5 @@
+using LinearAlgebra
+
 function sff(imageList, focusList; sampleStep=2, median=true)
     """
     Shape from Focus algorithm originally programmed in Matlab by Said Pertuz

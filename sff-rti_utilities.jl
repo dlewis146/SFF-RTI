@@ -41,10 +41,12 @@ function WriteMaps(structList, outputFolder, ZMax=nothing)
 
         normals = Depth2Normal(s.Z)
 
-        normalsX = shiftNormalsRange(normals[:,:,1])
-        normalsY = shiftNormalsRange(normals[:,:,2])
-        normalsZ = shiftNormalsRange(normals[:,:,3])
-        normalsColor = colorview(RGB, normalsX, normalsY, normalsZ)
+        normalsColor =  colorview(RGB, shiftNormalsRange(normals[:,:,1]), shiftNormalsRange(normals[:,:,2]), shiftNormalsRange(normals[:,:,3]))
+
+        # normalsX = shiftNormalsRange(normals[:,:,1])
+        # normalsY = shiftNormalsRange(normals[:,:,2])
+        # normalsZ = shiftNormalsRange(normals[:,:,3])
+        # normalsColor = colorview(RGB, normalsX, normalsY, normalsZ)
 
         outputFolder = FixPathEnding(outputFolder)
 
