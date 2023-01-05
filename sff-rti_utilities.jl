@@ -172,14 +172,14 @@ function WriteCSV(outputPath::String, folderList::Array{String}, methodList::Arr
 end
 
 
-function WriteCSVSingles(outputPath::String, folderList::Array{String}, methodList::Array{String}, kernelList::Array{String}, ksizeList::Array{Int}, ssimDict::Dict, msssimDict::Dict, psnrDict::Dict, ZMaxDict::Dict, RMaxDict::Dict)
+function WriteCSVSingles(outputPath::String, folderList::Array{String}, methodList::Array{String}, kernelList::Array{String}, ksizeList::Array{Int}, ssimDict::Dict, msssimDict::Dict, psnrDict::Dict, rmseDict::Dict, ZMaxDict::Dict, RMaxDict::Dict)
 
     # Write out comparison results
     println("Writing results to text file...")
     open(outputPath, "w") do io
 
         # Write header
-        write(io, "numRTI,numSFF,method,kernel,ms-ssim (just structure),ms-ssim,average psnr,ksize,Z normalization coefficient,R normalization coefficient\n")
+        write(io, "numRTI,numSFF,method,kernel,ms-ssim (just structure),ms-ssim,average psnr,rmse_masked,ksize,Z normalization coefficient,R normalization coefficient\n")
 
         for f in folderList
             for method in methodList
@@ -199,7 +199,7 @@ function WriteCSVSingles(outputPath::String, folderList::Array{String}, methodLi
                     for kernel in kernelList
 
                         # Create and write line to CSV
-                        lineOut = string(numRTI, ",", numSFF, ",", method, ",", kernel, ",", ssimDict[f,method,kernel,ksize], ",", msssimDict[f,method,kernel,ksize], ",", psnrDict[f,method,kernel,ksize], ",", ksize, ",", ZMaxDict[f,method,kernel,ksize], ",", RMaxDict[f,method,kernel,ksize], "\n")
+                        lineOut = string(numRTI, ",", numSFF, ",", method, ",", kernel, ",", ssimDict[f,method,kernel,ksize], ",", msssimDict[f,method,kernel,ksize], ",", psnrDict[f,method,kernel,ksize], ",", rmseDict[f,method,kernel,kize], ",", ksize, ",", ZMaxDict[f,method,kernel,ksize], ",", RMaxDict[f,method,kernel,ksize], "\n")
                         write(io, lineOut)
                     end
             

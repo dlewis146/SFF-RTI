@@ -320,6 +320,7 @@ function sff_rti(folderPath, methodList, kernelList, ksizeList; write_maps=false
     structureDict = Dict()
     msssimDict = Dict()
     psnrDict = Dict()
+    rmseDict = Dict()
 
     # outputStructList = Dict()
     outputStructList = []
@@ -338,6 +339,7 @@ function sff_rti(folderPath, methodList, kernelList, ksizeList; write_maps=false
                 kernel = lowercase(kernel)
 
                 println("Running SFF-RTI with variables:\nfolder: $f\nmethod: $method\nkernel: $kernel\nksize: $ksize\n")
+
                 # Call function to compute multi-light gradients using desired method
                 gradientList, zPosList, psnrDictCurrent = ComputeMultiLightGradients(folderPath, method, kernel; ksize=ksize, write_maps=write_maps, outputFolder=outputFolder, compute_psnr=compute_psnr)
 
@@ -351,6 +353,15 @@ function sff_rti(folderPath, methodList, kernelList, ksizeList; write_maps=false
 
                 numRTI, numSFF = ParseFolderName(f)
 
+
+                # Compute border mask using ground truth image and use that to mask the computed Z before doing anything else with it 
+                borderMask = DetectBorders(GT)
+                mask = abs.(mask .- 1.0)
+
+                ZBorderVal = Z[1,1]
+                Z = PaintMask(Z, mask; fillValue=ZBorderVal)
+
+
                 if outputFolder !== nothing
                     WriteMapSingle(Z, R, numRTI, numSFF, method, kernel, ksize, outputFolder)
                     ZMaxDict[f,method,kernel,ksize] = maximum(Z)
@@ -359,8 +370,9 @@ function sff_rti(folderPath, methodList, kernelList, ksizeList; write_maps=false
                     # push!(outputStructList, FileSet(Z,R,numRTI,numSFF,method,kernel))
                 end
 
-                # Normalize computed depth map so that it's placed from 0-1
+                # Normalize computed depth map so that it's placed from 0-1 for ground truth comparison
                 Z_normalized = imageDisp01(Z)
+                Z_normalized = FillBorders(Z_normalized, 1.0)
 
                 if compute_ssim
                     # Compute structural comparison measure and MS-SSIM then store all statistical measures in appropriate dictionaries
@@ -378,6 +390,8 @@ function sff_rti(folderPath, methodList, kernelList, ksizeList; write_maps=false
                     structureDict[f,method,kernel,ksize] = NaN
                     msssimDict[f,method,kernel,ksize] = NaN
                 end
+
+                rmseDict[f,method,kernel,ksize] = RMSE(GT, Z_normalized)            
 
                 psnrDict[f,method,kernel,ksize] = psnrMean
             end
@@ -402,7 +416,7 @@ function sff_rti(folderPath, methodList, kernelList, ksizeList; write_maps=false
         # csvPath = @printf("%s/Ground truth comparison results (%i,%i).csv", outputFolder, ksize[1], ksize[2])
         csvPath = outputFolder * "/Ground truth comparison results.csv"
 
-        WriteCSVSingles(csvPath, [f], methodList, kernelList, ksizeList, structureDict, msssimDict, psnrDict, ZMaxDict, RMaxDict)
+        WriteCSVSingles(csvPath, [f], methodList, kernelList, ksizeList, structureDict, msssimDict, psnrDict, rmseDict, ZMaxDict, RMaxDict)
         # WriteCSV(csvPath, [f], methodList, kernelList, ksizeList, structureDict, msssimDict, psnrDict, ZMax, RMax)
     end
 
