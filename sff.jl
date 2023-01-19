@@ -128,17 +128,19 @@ function GaussianInterpolation3Pt(x, imageStack, Gstep=2)
     return idxMax, interpolatedD, peakF, sigmaFOut
 end
 
+"""
+Depth2Normal(img)
 
+Takes in (m x n) image (depth map) and uses
+it to compute the surface normal at each point.
+
+Returns 3D array of normals where the channels are:
+    1st channel - X-component of normal
+    2nd channel - Y-component of normal
+    3rd channel - Z-component of normal
+"""
 function Depth2Normal(img)
-    """
-    Takes in (m x n) image (depth map) and uses
-    it to compute the surface normal at each point.
 
-    Returns 3D array of normals where the channels are:
-        1st channel - X-component of normal
-        2nd channel - Y-component of normal
-        3rd channel - Z-component of normal
-    """
 
     # img = Gray2Float64(img)
 
@@ -160,5 +162,68 @@ function Depth2Normal(img)
     end
 
     return normalsOut[2:size(normalsOut, 1)-1, 2:size(normalsOut, 2)-1, :]
+
+end
+
+
+
+"""
+ComputeAngularSimilarity(img1:Array, img2::Array)
+
+Computes the angular similarity between two given normal maps. 
+Assumes that the two given normal maps are geometrically aligned.
+
+Based on "POINT CLOUD QUALITY ASSESSMENT METRIC BASED ON ANGULAR SIMILARITY" by Evangelos Alexiou and Touradj Ebrahimi.
+"""
+function ComputeAngularSimilarity(img1::Array, img2::Array)
+
+    imgA = copy(img1)
+    imgB = copy(img2)
+
+    length(size(imgA)) !== 3 ? imgA = RGB2Float64(imgA) : nothing
+    length(size(imgB)) !== 3 ? imgB = RGB2Float64(imgB) : nothing
+
+    simAB = zeros(size(imgA, 1), size(imgA, 2))
+    simBA = zeros(size(imgB, 1), size(imgB, 2))
+
+    # NOTE: Can likely skip computation of symmetric error since I'm not using point clouds and having to determine nearest neighbors.
+
+    for r in range(1, stop=size(simAB, 1))
+        for c in range(1, stop=size(simAB, 2))
+
+            normalsA = imgA[r,c,:]
+            normalsB = imgB[r,c,:]
+
+            # Compute cosine similarity between angles
+            # NOTE: Rounding to 10 digits for precision issues with identical angles
+            cosSim = round(dot(normalsA,normalsB) / (norm(normalsA) * norm(normalsB)); digits=10)
+
+            simAB[r,c] = 1 - ((2 * acos(cosSim))/pi)
+
+        end
+    end
+
+
+    for r in range(1, stop=size(simBA, 1))
+        for c in range(1, stop=size(simBA, 2))
+
+            normalsA = imgA[r,c,:]
+            normalsB = imgB[r,c,:]
+
+            # Compute cosine similarity between angles
+            # NOTE: Rounding to 10 digits for precision issues with identical angles
+            cosSim = round(dot(normalsB,normalsA) / (norm(normalsB) * norm(normalsA)); digits=10)
+
+            simBA[r,c] = 1 - ((2 * acos(abs(cosSim)))/pi)
+        end
+    end
+
+
+    simAB_weightedAverage = mean(real.(simAB))
+    simBA_weightedAverage = mean(real.(simBA))
+
+    similaritySymmetric = min.(simAB_weightedAverage, simBA_weightedAverage)
+
+    return similaritySymmetric
 
 end

@@ -296,6 +296,8 @@ end
 
 
 """
+sff_rti(folderPath, methodList, kernelList, ksizeList; write_maps=false, write_csv=false, compute_psnr=false, compute_ssim=false, outputFolder="", gtPath="", ZMax=NaN)
+
 Meant to be used for handling a single acquisition with a single set of input parameters. Maybe unnecessary, but with all the file handling and computation/writing of stats, this could be useful.
 
 Copied on Nov. 26, 2022
@@ -321,6 +323,7 @@ function sff_rti(folderPath, methodList, kernelList, ksizeList; write_maps=false
     msssimDict = Dict()
     psnrDict = Dict()
     rmseDict = Dict()
+    aSimDict = Dict()
 
     # outputStructList = Dict()
     outputStructList = []
@@ -368,9 +371,12 @@ function sff_rti(folderPath, methodList, kernelList, ksizeList; write_maps=false
                     WriteMapSingle(Z, R, numRTI, numSFF, method, kernel, ksize, outputFolder)
                     ZMaxDict[f,method,kernel,ksize] = maximum(Z)
                     RMaxDict[f,method,kernel,ksize] = maximum(R)
-
-                    # push!(outputStructList, FileSet(Z,R,numRTI,numSFF,method,kernel))
                 end
+
+                normalsGT = RGB2Float64(ConstructNormalMap(GT))
+                normalsComputed = RGB2Float64(ConstructNormalMap(Z))
+
+                aSimDict[f,method,kernel,ksize] = ComputeAngularSimilarity(normalsGT, normalsComputed)
 
                 # Normalize computed depth map so that it's placed from 0-1 for ground truth comparison
                 Z_normalized = imageDisp01(Z)
@@ -400,26 +406,11 @@ function sff_rti(folderPath, methodList, kernelList, ksizeList; write_maps=false
         end
     end
 
-    # if isnan(ZMax)
-    #     ZMax = FindFileSetMax(outputStructList)
-    # else
-    #     println("NOTE: Using given ZMax normalization coefficient")
-    # end
-
-    # ZMax, RMax = FindFileSetMax(outputStructList)
-
-    # if write_maps == true
-    #     for ksize in ksizeList
-    #         WriteMaps(outputStructList, outputFolder*string(ksize), ZMax, RMax)
-    #     end
-    # end
 
     if write_csv == true
-        # csvPath = @printf("%s/Ground truth comparison results (%i,%i).csv", outputFolder, ksize[1], ksize[2])
         csvPath = outputFolder * "/Ground truth comparison results.csv"
 
-        WriteCSVSingles(csvPath, [f], methodList, kernelList, ksizeList, structureDict, msssimDict, psnrDict, rmseDict, ZMaxDict, RMaxDict)
-        # WriteCSV(csvPath, [f], methodList, kernelList, ksizeList, structureDict, msssimDict, psnrDict, ZMax, RMax)
+        WriteCSVSingles(csvPath, [f], methodList, kernelList, ksizeList, structureDict, msssimDict, psnrDict, rmseDict, asimDict, ZMaxDict, RMaxDict)
     end
 
 end

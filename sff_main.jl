@@ -79,6 +79,8 @@ function sff_handler(folderPath, kernelList, ksizeList; write_maps=false, output
     structureDict = Dict()
     rmseDict = Dict()
     psnrDict = Dict()
+    aSimDict = Dict()
+
 
     # Read in ground truth for SSIM comparison if needed
     GT = nothing
@@ -92,6 +94,7 @@ function sff_handler(folderPath, kernelList, ksizeList; write_maps=false, output
    outputStructList = []
    ZMaxDict = Dict()
    RMaxDict = Dict()
+
 
     f = basename(folderPath)
 
@@ -118,6 +121,8 @@ function sff_handler(folderPath, kernelList, ksizeList; write_maps=false, output
                 RMaxDict[f,"sff",kernel,ksize] = maximum(R)
                 # push!(outputStructList, FileSet(Z,R,0,parse(Int,f),"SFF",kernel))
             end
+
+            aSimDict[f,method,kernel,ksize] = ComputeAngularSimilarity(normalsGT, normalsComputed)
 
             # Normalize computed depth map so that it's placed from 0-1
             Z_normalized = imageDisp01(Z)

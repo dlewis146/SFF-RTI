@@ -51,9 +51,11 @@ function WriteMaps(structList, outputFolder, ZMax=nothing, RMax=nothing)
     for s in structList
         folderName = "RTI_"*string(s.numRTI)*"_SFF_"*string(s.numSFF)
 
-        normals = Depth2Normal(s.Z)
+        normalsColor = ConstructNormalMap(s.Z)
 
-        normalsColor =  colorview(RGB, shiftNormalsRange(normals[:,:,1]), shiftNormalsRange(normals[:,:,2]), shiftNormalsRange(normals[:,:,3]))
+        # normals = Depth2Normal(s.Z)
+
+        # normalsColor =  colorview(RGB, shiftNormalsRange(normals[:,:,1]), shiftNormalsRange(normals[:,:,2]), shiftNormalsRange(normals[:,:,3]))
 
         # normalsX = shiftNormalsRange(normals[:,:,1])
         # normalsY = shiftNormalsRange(normals[:,:,2])
@@ -84,12 +86,14 @@ function WriteMapSingle(Z, R, numRTI, numSFF, method, kernel, ksize, outputFolde
 
     folderName = "RTI_"*string(numRTI)*"_SFF_"*string(numSFF)
 
-    normals = Depth2Normal(Z)
+    normalsColor = ConstructNormalMap(Z)
 
-    normalsX = shiftNormalsRange(normals[:,:,1])
-    normalsY = shiftNormalsRange(normals[:,:,2])
-    normalsZ = shiftNormalsRange(normals[:,:,3])
-    normalsColor = colorview(RGB, normalsX, normalsY, normalsZ)
+    # normals = Depth2Normal(Z)
+
+    # normalsX = shiftNormalsRange(normals[:,:,1])
+    # normalsY = shiftNormalsRange(normals[:,:,2])
+    # normalsZ = shiftNormalsRange(normals[:,:,3])
+    # normalsColor = colorview(RGB, normalsX, normalsY, normalsZ)
 
     outputFolder = FixPathEnding(outputFolder)
 
@@ -114,12 +118,14 @@ function WriteMapSingle(Z, R, numSFF, kernel, ksize, outputFolder)
 
     folderName = "SFF_"*string(numSFF)
 
-    normals = Depth2Normal(Z)
+    normalsColor = ConstructNormalMap(Z)
 
-    normalsX = shiftNormalsRange(normals[:,:,1])
-    normalsY = shiftNormalsRange(normals[:,:,2])
-    normalsZ = shiftNormalsRange(normals[:,:,3])
-    normalsColor = colorview(RGB, normalsX, normalsY, normalsZ)
+    # normals = Depth2Normal(Z)
+
+    # normalsX = shiftNormalsRange(normals[:,:,1])
+    # normalsY = shiftNormalsRange(normals[:,:,2])
+    # normalsZ = shiftNormalsRange(normals[:,:,3])
+    # normalsColor = colorview(RGB, normalsX, normalsY, normalsZ)
 
     outputFolder = FixPathEnding(outputFolder)
 
@@ -172,14 +178,14 @@ function WriteCSV(outputPath::String, folderList::Array{String}, methodList::Arr
 end
 
 
-function WriteCSVSingles(outputPath::String, folderList::Array{String}, methodList::Array{String}, kernelList::Array{String}, ksizeList::Array{Int}, ssimDict::Dict, msssimDict::Dict, psnrDict::Dict, rmseDict::Dict, ZMaxDict::Dict, RMaxDict::Dict)
+function WriteCSVSingles(outputPath::String, folderList::Array{String}, methodList::Array{String}, kernelList::Array{String}, ksizeList::Array{Int}, ssimDict::Dict, msssimDict::Dict, psnrDict::Dict, rmseDict::Dict, aSimDict::Dict, ZMaxDict::Dict, RMaxDict::Dict)
 
     # Write out comparison results
     println("Writing results to text file...")
     open(outputPath, "w") do io
 
         # Write header
-        write(io, "numRTI,numSFF,method,kernel,ms-ssim (just structure),ms-ssim,average psnr,rmse_masked,ksize,Z normalization coefficient,R normalization coefficient\n")
+        write(io, "numRTI,numSFF,method,kernel,ms-ssim (just structure),ms-ssim,average psnr,rmse_masked,angular_similarity,ksize,Z normalization coefficient,R normalization coefficient\n")
 
         for f in folderList
             for method in methodList
@@ -199,7 +205,7 @@ function WriteCSVSingles(outputPath::String, folderList::Array{String}, methodLi
                     for kernel in kernelList
 
                         # Create and write line to CSV
-                        lineOut = string(numRTI, ",", numSFF, ",", method, ",", kernel, ",", ssimDict[f,method,kernel,ksize], ",", msssimDict[f,method,kernel,ksize], ",", psnrDict[f,method,kernel,ksize], ",", rmseDict[f,method,kernel,ksize], ",", ksize, ",", ZMaxDict[f,method,kernel,ksize], ",", RMaxDict[f,method,kernel,ksize], "\n")
+                        lineOut = string(numRTI, ",", numSFF, ",", method, ",", kernel, ",", ssimDict[f,method,kernel,ksize], ",", msssimDict[f,method,kernel,ksize], ",", psnrDict[f,method,kernel,ksize], ",", rmseDict[f,method,kernel,kize], ",", aSimDict[f,method,kernel,ksize], "," ksize, ",", ZMaxDict[f,method,kernel,ksize], ",", RMaxDict[f,method,kernel,ksize], "\n")
                         write(io, lineOut)
                     end
             
@@ -253,4 +259,16 @@ function CompositeFromDepthMap(fileList, depthMap)
     end
 
     return outputImage
+end
+
+function ConstructNormalMap(img)
+
+    normals = Depth2Normal(Gray2Float64(ing))
+
+    normalsX = shiftNormalsRange(normals[:,:,1])
+    normalsY = shiftNormalsRange(normals[:,:,2])
+    normalsZ = shiftNormalsRange(normals[:,:,3])
+    normalsColor = colorview(RGB, normalsX, normalsY, normalsZ)
+
+    return normalsColor
 end
