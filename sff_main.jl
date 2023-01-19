@@ -26,9 +26,21 @@ function sff_main(baseFolder, kernel::String="sml"; ksize::Int=5, outputFolder::
     # NOTE: Using this instead of just globbing all files so that they're read in and stored in the proper order. This doesn't happen by default due to a lack of zero-padding of frame numbers in file names
     rowList = CSV.File(csvPath; select=["image", "z_cam"])
     fileList = []
+    zPosList = []
+
     for row in rowList
         push!(fileList, folderPath*row.image*".png")
+        push!(zPosList, row.z_cam)
     end
+
+    # NOTE: Reversing focusList for consistency with SFF-RTI and GT where point closest to camera is lowest pixel value and further is highest value
+    # focusList = sort([row.z_cam for row in focusList], rev=true)
+
+
+    p = sortperm(zPosList)
+    fileList = reverse(fileList[p])
+    zPosList = reverse(zPosList[p])
+
 
     # Compute focus maps and store in array
     imageList = []
