@@ -356,10 +356,12 @@ function sff_rti(folderPath, methodList, kernelList, ksizeList; write_maps=false
 
                 # Compute border mask using ground truth image and use that to mask the computed Z before doing anything else with it 
                 borderMask = DetectBorders(GT)
-                mask = abs.(mask .- 1.0)
+                borderMask = abs.(borderMask .- 1.0)
 
                 ZBorderVal = Z[1,1]
-                Z = PaintMask(Z, mask; fillValue=ZBorderVal)
+                Z = PaintMask(Z, borderMask; fillValue=ZBorderVal)
+
+                save(outputFolder*"/mask.png", borderMask)
 
 
                 if outputFolder !== nothing

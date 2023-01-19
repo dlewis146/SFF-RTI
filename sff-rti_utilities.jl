@@ -199,7 +199,7 @@ function WriteCSVSingles(outputPath::String, folderList::Array{String}, methodLi
                     for kernel in kernelList
 
                         # Create and write line to CSV
-                        lineOut = string(numRTI, ",", numSFF, ",", method, ",", kernel, ",", ssimDict[f,method,kernel,ksize], ",", msssimDict[f,method,kernel,ksize], ",", psnrDict[f,method,kernel,ksize], ",", rmseDict[f,method,kernel,kize], ",", ksize, ",", ZMaxDict[f,method,kernel,ksize], ",", RMaxDict[f,method,kernel,ksize], "\n")
+                        lineOut = string(numRTI, ",", numSFF, ",", method, ",", kernel, ",", ssimDict[f,method,kernel,ksize], ",", msssimDict[f,method,kernel,ksize], ",", psnrDict[f,method,kernel,ksize], ",", rmseDict[f,method,kernel,ksize], ",", ksize, ",", ZMaxDict[f,method,kernel,ksize], ",", RMaxDict[f,method,kernel,ksize], "\n")
                         write(io, lineOut)
                     end
             

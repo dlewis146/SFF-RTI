@@ -65,13 +65,8 @@ function sff_main(baseFolder, kernel::String="sml"; ksize::Int=5, outputFolder::
         push!(imageList, focusMap)
     end
 
-    # Read z_cam out of CSV and then extract from array of CSV.Row objects into a vector of Float64's
-    focusList = CSV.File(csvPath; select=["z_cam"])
 
-    # NOTE: Reversing focusList for consistency with SFF-RTI and GT where point closest to camera is lowest pixel value and further is highest value
-    focusList = sort([row.z_cam for row in focusList], rev=true)
-
-    Z, R = sff(imageList, focusList; sampleStep=2, median=true)
+    Z, R = sff(imageList, zPosList; sampleStep=2, median=true)
 
     return Z, R
 end
@@ -82,6 +77,7 @@ function sff_handler(folderPath, kernelList, ksizeList; write_maps=false, output
     # Create empty dictionaries to gather MS-SIM, MS-SSIM (Just structure) and PSNR
     msssimDict = Dict()
     structureDict = Dict()
+    rmseDict = Dict()
     psnrDict = Dict()
 
     # Read in ground truth for SSIM comparison if needed
@@ -107,6 +103,15 @@ function sff_handler(folderPath, kernelList, ksizeList; write_maps=false, output
             # Run SFF method
             Z, R = sff_main(folderPath, kernel; ksize=ksize, outputFolder=outputFolder, write_maps=write_maps)
 
+            # Compute border mask using ground truth image and use that to mask the computed Z before doing anything else with it 
+            borderMask = DetectBorders(GT)
+            borderMask = abs.(borderMask .- 1.0)
+
+            ZBorderVal = Z[1,1]
+            Z = PaintMask(Z, borderMask; fillValue=ZBorderVal)
+
+            save(outputFolder*"/mask.png", borderMask)
+
             if outputFolder !== nothing
                 WriteMapSingle(Z, R, basename(f), kernel, ksize, outputFolder)
                 ZMaxDict[f,"sff",kernel,ksize] = maximum(Z)
@@ -116,7 +121,7 @@ function sff_handler(folderPath, kernelList, ksizeList; write_maps=false, output
 
             # Normalize computed depth map so that it's placed from 0-1
             Z_normalized = imageDisp01(Z)
-            # Z_normalized = complement.(imageDisp01(Z))
+            Z_normalized = FillBorders(Z_normalized, 1.0)
 
             if compute_ssim
                 # Compute SSIM and MS-SSIM then store all statistical measures in appropriate dictionaries
@@ -136,6 +141,8 @@ function sff_handler(folderPath, kernelList, ksizeList; write_maps=false, output
                 msssimDict[f,"sff",kernel, ksize] = 0
             end
 
+            rmseDict[f,"sff",kernel,ksize] = RMSE(GT, Z_normalized)      
+
             # Not computing PSNR for SFF collections, but we create dummy entries for compatibility with `WriteCSV`
             psnrDict[f,"sff",kernel, ksize] = 0
         end
@@ -153,7 +160,7 @@ function sff_handler(folderPath, kernelList, ksizeList; write_maps=false, output
         # csvPath = @printf("%s/Ground truth comparison results (%i,%i).csv", outputFolder, ksize[1], ksize[2])
         csvPath = outputFolder * "/Ground truth comparison results.csv"
 
-        WriteCSVSingles(csvPath, [f], ["sff"], kernelList, ksizeList, structureDict, msssimDict, psnrDict, ZMaxDict, RMaxDict)
+        WriteCSVSingles(csvPath, [f], ["sff"], kernelList, ksizeList, structureDict, msssimDict, psnrDict, rmseDict, ZMaxDict, RMaxDict)
         # WriteCSV(csvPath, [f], methodList, kernelList, ksizeList, structureDict, msssimDict, psnrDict, ZMax, RMax)
     end
 
