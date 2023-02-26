@@ -122,7 +122,10 @@ function sff_handler(folderPath, kernelList, ksizeList; write_maps=false, output
                 # push!(outputStructList, FileSet(Z,R,0,parse(Int,f),"SFF",kernel))
             end
 
-            aSimDict[f,method,kernel,ksize] = ComputeAngularSimilarity(normalsGT, normalsComputed)
+            normalsGT = RGB2Float64(ConstructNormalMap(GT))
+            normalsComputed = RGB2Float64(ConstructNormalMap(Z))
+
+            aSimDict[f,"sff",kernel,ksize] = ComputeAngularSimilarity(normalsGT, normalsComputed)
 
             # Normalize computed depth map so that it's placed from 0-1
             Z_normalized = imageDisp01(Z)
@@ -165,7 +168,7 @@ function sff_handler(folderPath, kernelList, ksizeList; write_maps=false, output
         # csvPath = @printf("%s/Ground truth comparison results (%i,%i).csv", outputFolder, ksize[1], ksize[2])
         csvPath = outputFolder * "/Ground truth comparison results.csv"
 
-        WriteCSVSingles(csvPath, [f], ["sff"], kernelList, ksizeList, structureDict, msssimDict, psnrDict, rmseDict, ZMaxDict, RMaxDict)
+        WriteCSVSingles(csvPath, [f], ["sff"], kernelList, ksizeList, structureDict, msssimDict, psnrDict, rmseDict, aSimDict, ZMaxDict, RMaxDict)
         # WriteCSV(csvPath, [f], methodList, kernelList, ksizeList, structureDict, msssimDict, psnrDict, ZMax, RMax)
     end
 

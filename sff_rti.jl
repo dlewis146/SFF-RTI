@@ -410,7 +410,7 @@ function sff_rti(folderPath, methodList, kernelList, ksizeList; write_maps=false
     if write_csv == true
         csvPath = outputFolder * "/Ground truth comparison results.csv"
 
-        WriteCSVSingles(csvPath, [f], methodList, kernelList, ksizeList, structureDict, msssimDict, psnrDict, rmseDict, asimDict, ZMaxDict, RMaxDict)
+        WriteCSVSingles(csvPath, [f], methodList, kernelList, ksizeList, structureDict, msssimDict, psnrDict, rmseDict, aSimDict, ZMaxDict, RMaxDict)
     end
 
 end

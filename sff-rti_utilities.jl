@@ -205,7 +205,7 @@ function WriteCSVSingles(outputPath::String, folderList::Array{String}, methodLi
                     for kernel in kernelList
 
                         # Create and write line to CSV
-                        lineOut = string(numRTI, ",", numSFF, ",", method, ",", kernel, ",", ssimDict[f,method,kernel,ksize], ",", msssimDict[f,method,kernel,ksize], ",", psnrDict[f,method,kernel,ksize], ",", rmseDict[f,method,kernel,kize], ",", aSimDict[f,method,kernel,ksize], "," ksize, ",", ZMaxDict[f,method,kernel,ksize], ",", RMaxDict[f,method,kernel,ksize], "\n")
+                        lineOut = string(numRTI, ",", numSFF, ",", method, ",", kernel, ",", ssimDict[f,method,kernel,ksize], ",", msssimDict[f,method,kernel,ksize], ",", psnrDict[f,method,kernel,ksize], ",", rmseDict[f,method,kernel,ksize], ",", aSimDict[f,method,kernel,ksize], ",", ksize, ",", ZMaxDict[f,method,kernel,ksize], ",", RMaxDict[f,method,kernel,ksize], "\n")
                         write(io, lineOut)
                     end
             
@@ -263,7 +263,7 @@ end
 
 function ConstructNormalMap(img)
 
-    normals = Depth2Normal(Gray2Float64(ing))
+    normals = Depth2Normal(Gray2Float64(img))
 
     normalsX = shiftNormalsRange(normals[:,:,1])
     normalsY = shiftNormalsRange(normals[:,:,2])
